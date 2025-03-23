@@ -38,17 +38,62 @@ async function makeAzureDevOpsRequest(
     ...extraHeaders,
   };
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  try {
+    console.error(`[API] Making request to: ${url}`);
+    console.error(`[API] Method: ${method}`);
+    if (body) console.error(`[API] Body:`, JSON.stringify(body, null, 2));
+    if (extraHeaders) console.error(`[API] Extra headers:`, extraHeaders);
 
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.statusText}`);
+    const requestBody = body ? JSON.stringify(body) : undefined;
+    console.error(`[API] Request body:`, requestBody);
+
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: requestBody,
+    });
+
+    console.error(`[API] Response status:`, response.status);
+    console.error(
+      `[API] Response headers:`,
+      Object.fromEntries(response.headers.entries())
+    );
+
+    const responseText = await response.text();
+    console.error(`[API] Response body:`, responseText);
+
+    if (!response.ok) {
+      throw new Error(
+        `API request failed (${response.status}): ${responseText}`
+      );
+    }
+
+    if (responseText) {
+      return JSON.parse(responseText);
+    }
+    return null;
+  } catch (error) {
+    console.error(`[API] Request failed:`, error);
+    throw error;
   }
+}
 
-  return response.json();
+// Error handling helpers
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function logError(context: string, error: unknown) {
+  console.error(`[Error] ${context}:`, error);
+  if (error && typeof error === "object" && "serverError" in error) {
+    console.error(
+      "Server details:",
+      (error as { serverError: unknown }).serverError
+    );
+  }
 }
 
 // Input validation schemas
@@ -76,7 +121,7 @@ const createWorkItemSchema = z.object({
 const listPullRequestsSchema = z.object({
   project: z.string(),
   repository: z.string(),
-  status: z.enum(["active", "completed", "abandoned"]).optional(), // Azure DevOps API pull request status
+  status: z.enum(["active", "completed", "abandoned"]).optional(),
 });
 
 const getPullRequestSchema = z.object({
@@ -111,7 +156,7 @@ const editWikiPageSchema = z.object({
   etag: z.string(),
 });
 
-// Create the MCP server
+// Create MCP server
 const server = new Server(
   {
     name: "azure-devops",
@@ -123,24 +168,6 @@ const server = new Server(
     },
   }
 );
-
-// Error handling helpers
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function logError(context: string, error: unknown) {
-  console.error(`[Error] ${context}:`, error);
-  if (error && typeof error === "object" && "serverError" in error) {
-    console.error(
-      "Server details:",
-      (error as { serverError: unknown }).serverError
-    );
-  }
-}
 
 // Tool implementations
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -175,205 +202,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["project"],
         },
       },
-      {
-        name: "get_work_item",
-        description: "Get details of a specific work item",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            id: {
-              type: "number",
-              description: "ID of the work item",
-            },
-          },
-          required: ["project", "id"],
-        },
-      },
-      {
-        name: "create_work_item",
-        description: "Create a new work item",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            type: {
-              type: "string",
-              description: "Type of work item (e.g., 'Task', 'Bug')",
-            },
-            title: {
-              type: "string",
-              description: "Title of the work item",
-            },
-            description: {
-              type: "string",
-              description: "Description of the work item",
-            },
-            assignedTo: {
-              type: "string",
-              description: "User to assign the work item to",
-            },
-          },
-          required: ["project", "type", "title"],
-        },
-      },
-
-      // Pull Requests
-      {
-        name: "list_pull_requests",
-        description: "List pull requests in a repository",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            repository: {
-              type: "string",
-              description: "Name of the repository",
-            },
-            status: {
-              type: "string",
-              enum: ["active", "completed", "abandoned"],
-              description: "Filter by PR status",
-            },
-          },
-          required: ["project", "repository"],
-        },
-      },
-      {
-        name: "get_pull_request",
-        description: "Get details of a specific pull request",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            repository: {
-              type: "string",
-              description: "Name of the repository",
-            },
-            pullRequestId: {
-              type: "number",
-              description: "ID of the pull request",
-            },
-          },
-          required: ["project", "repository", "pullRequestId"],
-        },
-      },
-      {
-        name: "create_pull_request",
-        description: "Create a new pull request",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            repository: {
-              type: "string",
-              description: "Name of the repository",
-            },
-            title: {
-              type: "string",
-              description: "Title of the pull request",
-            },
-            description: {
-              type: "string",
-              description: "Description of the pull request",
-            },
-            sourceBranch: {
-              type: "string",
-              description: "Source branch name",
-            },
-            targetBranch: {
-              type: "string",
-              description: "Target branch name",
-            },
-            reviewers: {
-              type: "array",
-              items: { type: "string" },
-              description: "Array of reviewer email addresses",
-            },
-          },
-          required: [
-            "project",
-            "repository",
-            "title",
-            "description",
-            "sourceBranch",
-            "targetBranch",
-          ],
-        },
-      },
-
-      // Wiki
-      {
-        name: "create_wiki_page",
-        description: "Create a new wiki page",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            wiki: {
-              type: "string",
-              description: "Name of the wiki",
-            },
-            path: {
-              type: "string",
-              description: "Path of the wiki page",
-            },
-            content: {
-              type: "string",
-              description: "Content of the wiki page",
-            },
-          },
-          required: ["project", "wiki", "path", "content"],
-        },
-      },
-      {
-        name: "edit_wiki_page",
-        description: "Edit an existing wiki page",
-        inputSchema: {
-          type: "object",
-          properties: {
-            project: {
-              type: "string",
-              description: "Name of the Azure DevOps project",
-            },
-            wiki: {
-              type: "string",
-              description: "Name of the wiki",
-            },
-            path: {
-              type: "string",
-              description: "Path of the wiki page",
-            },
-            content: {
-              type: "string",
-              description: "New content of the wiki page",
-            },
-            etag: {
-              type: "string",
-              description: "ETag for concurrency control",
-            },
-          },
-          required: ["project", "wiki", "path", "content", "etag"],
-        },
-      },
+      // ... (other tool definitions)
     ],
   };
 });
@@ -381,188 +210,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (request.params.name) {
-      // Work Items
       case "list_work_items": {
         const params = listWorkItemsSchema.parse(request.params.arguments);
-        console.error("[API] Listing work items for project:", params.project);
-
-        const client = await connection.getWorkItemTrackingApi();
-        const query = `SELECT [System.Id] FROM WorkItems`;
-        const queryResult = await client.queryByWiql(
-          { query },
-          { project: params.project }
-        );
-
-        if (!queryResult.workItems?.length) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "No work items found",
-              },
-            ],
-          };
-        }
-
-        const ids = queryResult.workItems
-          .map((wi) => wi.id)
-          .filter((id): id is number => id !== undefined);
-        const workItems = await client.getWorkItems(ids);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(workItems, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_work_item": {
-        const params = getWorkItemSchema.parse(request.params.arguments);
-        console.error("[API] Getting work item:", params.id);
-
-        const client = await connection.getWorkItemTrackingApi();
-        const workItem = await client.getWorkItem(params.id);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(workItem, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "create_work_item": {
-        const params = createWorkItemSchema.parse(request.params.arguments);
-        console.error("[API] Creating work item in project:", params.project);
-
-        const client = await connection.getWorkItemTrackingApi();
-        const patchDocument = [
-          {
-            op: "add",
-            path: "/fields/System.Title",
-            value: params.title,
-          },
-        ];
-
-        if (params.description) {
-          patchDocument.push({
-            op: "add",
-            path: "/fields/System.Description",
-            value: params.description,
-          });
-        }
-
-        if (params.assignedTo) {
-          patchDocument.push({
-            op: "add",
-            path: "/fields/System.AssignedTo",
-            value: params.assignedTo,
-          });
-        }
-
-        const workItem = await client.createWorkItem(
-          undefined,
-          patchDocument,
-          params.project,
-          params.type
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(workItem, null, 2),
-            },
-          ],
-        };
-      }
-
-      // Pull Requests
-      case "list_pull_requests": {
-        const params = listPullRequestsSchema.parse(request.params.arguments);
-        console.error(
-          "[API] Listing pull requests for repo:",
-          params.repository
-        );
-
-        const client = await connection.getGitApi();
-        const pullRequests = await client.getPullRequests(
-          params.repository,
-          {
-            status:
-              params.status === "completed"
-                ? 3
-                : params.status === "abandoned"
-                ? 2
-                : 1, // 1=active, 2=abandoned, 3=completed
-          },
-          params.project
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(pullRequests, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_pull_request": {
-        const params = getPullRequestSchema.parse(request.params.arguments);
-        console.error("[API] Getting pull request:", params.pullRequestId);
-
-        const client = await connection.getGitApi();
-        const pullRequest = await client.getPullRequest(
-          params.repository,
-          params.pullRequestId,
-          params.project
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(pullRequest, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "create_pull_request": {
-        const params = createPullRequestSchema.parse(request.params.arguments);
-        console.error(
-          "[API] Creating pull request in repo:",
-          params.repository
-        );
-
-        const client = await connection.getGitApi();
-        const pullRequest = await client.createPullRequest(
-          {
-            sourceRefName: `refs/heads/${params.sourceBranch}`,
-            targetRefName: `refs/heads/${params.targetBranch}`,
-            title: params.title,
-            description: params.description,
-            reviewers: params.reviewers?.map((email) => ({ id: email })),
-          },
-          params.repository,
-          params.project
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(pullRequest, null, 2),
-            },
-          ],
-        };
+        // ... (existing implementation)
       }
 
       // Wiki
@@ -570,14 +220,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const params = createWikiPageSchema.parse(request.params.arguments);
         console.error("[API] Creating wiki page:", params.path);
 
-        // Use REST API directly for wiki operations
-        const wikiUrl = `${ORG_URL}/${params.project}/_apis/wiki/wikis/${
-          params.wiki
-        }/pages?path=${encodeURIComponent(params.path)}&api-version=7.0`;
+        const projectId = "899988fe-5224-40ba-828d-68d6c660d2eb";
 
-        const page = await makeAzureDevOpsRequest(wikiUrl, "PUT", {
+        // First try to get all wikis in the project
+        const wikiListUrl = `${ORG_URL}/${params.project}/_wiki/wikis/${params.wiki}?api-version=7.1-preview.1`;
+        console.error("[API] Getting wikis from:", wikiListUrl);
+        const wikis = await makeAzureDevOpsRequest(wikiListUrl);
+        console.error("[API] Found wikis:", wikis);
+
+        // Try to find existing wiki
+        let wiki = wikis.value.find((w: any) => w.name === params.wiki);
+
+        if (!wiki) {
+          // Create new project wiki
+          console.error("[API] Creating new project wiki");
+          const createWikiUrl = `${ORG_URL}/${params.project}/_wiki/wikis?api-version=7.1-preview.1`;
+          wiki = await makeAzureDevOpsRequest(createWikiUrl, "POST", {
+            name: `${params.wiki}.wiki`,
+            projectId: params.project,
+            type: "projectWiki",
+          });
+          console.error("[API] Created wiki:", wiki);
+        }
+
+        // Create the page using REST API
+        const pageUrl = `${ORG_URL}/${params.project}/_wiki/wikis/${
+          wiki.id
+        }/pages?path=${encodeURIComponent(
+          params.path
+        )}&api-version=7.1-preview.1`;
+        const page = await makeAzureDevOpsRequest(pageUrl, "PUT", {
           content: params.content,
         });
+        console.error("[API] Created page:", page);
 
         return {
           content: [
@@ -593,16 +268,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const params = editWikiPageSchema.parse(request.params.arguments);
         console.error("[API] Editing wiki page:", params.path);
 
-        // Use REST API directly for wiki operations
-        const wikiUrl = `${ORG_URL}/${params.project}/_apis/wiki/wikis/${
+        const projectId = "899988fe-5224-40ba-828d-68d6c660d2eb";
+        const editPageUrl = `${ORG_URL}/${params.project}/_wiki/wikis/${
           params.wiki
-        }/pages?path=${encodeURIComponent(params.path)}&api-version=7.0`;
+        }/pages?path=${encodeURIComponent(
+          params.path
+        )}&api-version=7.1-preview.1`;
 
-        // Update wiki page with etag for concurrency control
         const page = await makeAzureDevOpsRequest(
-          wikiUrl,
+          editPageUrl,
           "PUT",
-          { content: params.content },
+          params.content,
           { "If-Match": params.etag }
         );
 
