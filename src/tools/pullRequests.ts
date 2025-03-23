@@ -300,74 +300,145 @@ export async function getPullRequestDiff(rawParams: any) {
     // Get the Git API client
     const gitClient = await getGitClient();
 
+    // Get pull request details first to get source and target commits
+    const pullRequest = await gitClient.getPullRequestById(
+      params.pullRequestId,
+      params.project
+    );
+
+    // Check for missing sourceRefName or targetRefName
+    if (!pullRequest.sourceRefName) {
+      throw new Error(
+        "Source branch reference is missing in pull request data"
+      );
+    }
+    if (!pullRequest.targetRefName) {
+      throw new Error(
+        "Target branch reference is missing in pull request data"
+      );
+    }
+
+    const sourceBranch = pullRequest.sourceRefName.replace("refs/heads/", "");
+    const targetBranch = pullRequest.targetRefName.replace("refs/heads/", "");
+
+    if (!sourceBranch) {
+      throw new Error(
+        "Invalid source branch name extracted from sourceRefName"
+      );
+    }
+    if (!targetBranch) {
+      throw new Error(
+        "Invalid target branch name extracted from targetRefName"
+      );
+    }
+
     // Get the iterations to find the latest one if not specified
     const iterationsUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
     const iterations = await makeAzureDevOpsRequest(iterationsUrl);
-    console.error("[API] PR iterations:", iterations);
-
     const iterationId =
       params.iterationId ||
       (iterations.value.length > 0
         ? iterations.value[iterations.value.length - 1].id
         : 1);
 
-    console.error(`[API] Using iteration ID: ${iterationId}`);
-
-    // Build the URL for getting changes
+    // Get the changes for this iteration
     let changesUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/iterations/${iterationId}/changes?api-version=7.1-preview.1`;
-
-    // Add file path filter if specified
     if (params.filePath) {
       changesUrl += `&path=${encodeURIComponent(params.filePath)}`;
     }
-
-    // Get the changes
     const changes = await makeAzureDevOpsRequest(changesUrl);
-    console.error("[API] PR changes:", changes);
 
-    // Format the diff output
-    let formattedDiff = "";
+    // Prepare the diff output
+    let fullDiff = "";
 
     if (changes.changeEntries && changes.changeEntries.length > 0) {
       for (const change of changes.changeEntries) {
-        formattedDiff += `\n--- ${change.item.path} (${change.changeType})\n`;
+        fullDiff += `\ndiff --git a${change.item.path} b${change.item.path}\n`;
 
-        // If we need the actual diff content, we need to get the file content
-        if (change.item && change.item.objectId) {
-          const itemUrl = `${ORG_URL}/${
-            params.project
-          }/_apis/git/repositories/${
-            params.repository
-          }/items?path=${encodeURIComponent(
-            change.item.path
-          )}&versionType=commit&version=${
-            change.item.objectId
-          }&api-version=7.1-preview.1`;
-          try {
-            const itemContent = await makeAzureDevOpsRequest(itemUrl);
-            if (itemContent && itemContent.content) {
-              formattedDiff += `\n${itemContent.content}\n`;
-            }
-          } catch (error) {
-            formattedDiff += `\nUnable to retrieve file content: ${
-              error instanceof Error ? error.message : String(error)
-            }\n`;
+        if (change.changeType === "add") {
+          fullDiff += `new file mode 100644\n`;
+          fullDiff += `index 0000000..${change.item.objectId || "unknown"}\n`;
+          fullDiff += `--- /dev/null\n`;
+          fullDiff += `+++ b${change.item.path}\n`;
+
+          const content = await getFileContent(
+            params.project,
+            params.repository,
+            change.item.path,
+            sourceBranch
+          );
+          if (content) {
+            fullDiff +=
+              content
+                .split("\n")
+                .map((line) => `+${line}`)
+                .join("\n") + "\n";
+          } else {
+            fullDiff += `+<Unable to retrieve file content>\n`;
+          }
+        } else if (change.changeType === "delete") {
+          fullDiff += `deleted file mode 100644\n`;
+          fullDiff += `index ${change.item.objectId || "unknown"}..0000000\n`;
+          fullDiff += `--- a${change.item.path}\n`;
+          fullDiff += `+++ /dev/null\n`;
+
+          const content = await getFileContent(
+            params.project,
+            params.repository,
+            change.item.path,
+            targetBranch
+          );
+          if (content) {
+            fullDiff +=
+              content
+                .split("\n")
+                .map((line) => `-${line}`)
+                .join("\n") + "\n";
+          } else {
+            fullDiff += `-<Unable to retrieve file content>\n`;
+          }
+        } else if (change.changeType === "edit") {
+          fullDiff += `index ${change.item.objectId || "unknown"}..${
+            change.item.objectId || "unknown"
+          } 100644\n`;
+          fullDiff += `--- a${change.item.path}\n`;
+          fullDiff += `+++ b${change.item.path}\n`;
+
+          const oldContent = await getFileContent(
+            params.project,
+            params.repository,
+            change.item.path,
+            targetBranch
+          );
+          const newContent = await getFileContent(
+            params.project,
+            params.repository,
+            change.item.path,
+            sourceBranch
+          );
+
+          if (oldContent && newContent) {
+            fullDiff += generateUnifiedDiff(oldContent, newContent);
+          } else {
+            fullDiff += `@@ -1,1 +1,1 @@\n`;
+            fullDiff += oldContent
+              ? `-${oldContent.split("\n")[0]}\n`
+              : `-<Unable to retrieve old content>\n`;
+            fullDiff += newContent
+              ? `+${newContent.split("\n")[0]}\n`
+              : `+<Unable to retrieve new content>\n`;
           }
         }
       }
     } else {
-      formattedDiff = "No changes found in this pull request.";
+      fullDiff = "No changes found in this pull request.";
     }
 
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(changes, null, 2),
-        },
-        {
-          type: "text",
-          text: formattedDiff,
+          text: fullDiff,
         },
       ],
     };
@@ -376,7 +447,61 @@ export async function getPullRequestDiff(rawParams: any) {
     throw error;
   }
 }
+// Helper function to get file content
+async function getFileContent(
+  project: string,
+  repository: string,
+  path: string,
+  version: string
+): Promise<string> {
+  try {
+    const itemUrl = `${ORG_URL}/${project}/_apis/git/repositories/${repository}/items?path=${encodeURIComponent(
+      path
+    )}&versionType=branch&version=${encodeURIComponent(
+      version
+    )}&api-version=7.1-preview.1`;
+    const response = await makeAzureDevOpsRequest(itemUrl);
 
+    if (response && typeof response === "object" && response.content) {
+      return response.content;
+    } else if (typeof response === "string") {
+      return response;
+    }
+    return "";
+  } catch (error) {
+    console.error(`[API] Error fetching file content for ${path}:`, error);
+    return "";
+  }
+}
+
+// Helper function to generate unified diff
+function generateUnifiedDiff(oldContent: string, newContent: string): string {
+  const oldLines = oldContent.split("\n");
+  const newLines = newContent.split("\n");
+  let diffLines: string[] = [];
+
+  // Simple line-by-line comparison (could be improved with a proper diff algorithm)
+  const maxLines = Math.max(oldLines.length, newLines.length);
+
+  for (let i = 0; i < maxLines; i++) {
+    const oldLine = i < oldLines.length ? oldLines[i] : "";
+    const newLine = i < newLines.length ? newLines[i] : "";
+
+    if (oldLine === newLine) {
+      diffLines.push(` ${oldLine}`);
+    } else {
+      if (oldLine) diffLines.push(`-${oldLine}`);
+      if (newLine) diffLines.push(`+${newLine}`);
+    }
+  }
+
+  // Add basic hunk header
+  if (diffLines.length > 0) {
+    const hunkHeader = `@@ -1,${oldLines.length} +1,${newLines.length} @@\n`;
+    return hunkHeader + diffLines.join("\n") + "\n";
+  }
+  return "";
+}
 /**
  * Tool definitions for pull requests
  */
