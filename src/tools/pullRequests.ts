@@ -172,7 +172,7 @@ export async function createPullRequest(rawParams: any) {
 }
 
 /**
- * Add a comment to a pull request
+ * Add a comment to a pull request, including support for file and line-specific comments
  */
 export async function createPullRequestComment(rawParams: any) {
   // Parse arguments with defaults from environment variables
@@ -194,13 +194,12 @@ export async function createPullRequestComment(rawParams: any) {
     const gitClient = await getGitClient();
 
     if (params.threadId) {
-      // This is a reply to an existing thread
+      // Reply to an existing thread
       console.error(`[API] Adding comment to thread ${params.threadId}`);
 
-      // Create comment in existing thread
       const comment = {
         content: params.content,
-        parentCommentId: 0, // Root level comment in thread
+        parentCommentId: 0, // Root-level comment in thread
       };
 
       const commentUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/threads/${params.threadId}/comments?api-version=7.1-preview.1`;
@@ -220,18 +219,19 @@ export async function createPullRequestComment(rawParams: any) {
         comments: [
           {
             content: params.content,
+            commentType: 1, // 1 = text comment
           },
         ],
         status: params.status || "active",
       };
 
-      // If file path is provided, this is a code comment
+      // Handle file and line-specific comments
       if (params.filePath) {
         console.error(
           `[API] Creating code comment on file: ${params.filePath}`
         );
 
-        // Get the latest iteration
+        // Get the latest iteration of the pull request
         const iterationsUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
         const iterations = await makeAzureDevOpsRequest(iterationsUrl);
         const latestIteration =
@@ -239,17 +239,26 @@ export async function createPullRequestComment(rawParams: any) {
             ? iterations.value[iterations.value.length - 1].id
             : 1;
 
-        // Add file position information
+        // Ensure file path starts with "/"
+        const normalizedFilePath = params.filePath.startsWith("/")
+          ? params.filePath
+          : `/${params.filePath}`;
+
+        // Add thread context for file and line-specific comments
         thread.threadContext = {
-          filePath: params.filePath,
-          rightFileStart: {
-            line: params.lineNumber || 1,
-            offset: 1,
-          },
-          rightFileEnd: {
-            line: params.lineNumber || 1,
-            offset: 1,
-          },
+          filePath: normalizedFilePath,
+          rightFileStart: params.lineNumber
+            ? {
+                line: params.lineNumber,
+                offset: 1, // Start at beginning of line
+              }
+            : undefined,
+          rightFileEnd: params.lineNumber
+            ? {
+                line: params.lineNumber,
+                offset: 1, // End at beginning of line (single line comment)
+              }
+            : undefined,
         };
 
         thread.pullRequestThreadContext = {
@@ -257,12 +266,13 @@ export async function createPullRequestComment(rawParams: any) {
             firstComparingIteration: latestIteration,
             secondComparingIteration: latestIteration,
           },
+          changeTrackingId: latestIteration, // Helps track the change context
         };
       } else {
         console.error("[API] Creating general PR comment");
       }
 
-      // Create the thread
+      // Create the new thread
       const threadUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/threads?api-version=7.1-preview.1`;
       const result = await makeAzureDevOpsRequest(threadUrl, "POST", thread);
 
@@ -280,7 +290,6 @@ export async function createPullRequestComment(rawParams: any) {
     throw error;
   }
 }
-
 /**
  * Get the diff for a pull request
  */
