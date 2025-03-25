@@ -3,3 +3,5 @@ build/
 .env
 .env.*
 !.env.example
+.clinerules
+/memory-bank
