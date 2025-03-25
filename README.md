@@ -1,70 +1,184 @@
-# azure-devops MCP Server
+# Azure DevOps MCP Server
 
-A Model Context Protocol server
-
-This is a TypeScript-based MCP server that implements a simple notes system. It demonstrates core MCP concepts by providing:
-
-- Resources representing text notes with URIs and metadata
-- Tools for creating new notes
-- Prompts for generating summaries of notes
+An MCP (Model Context Protocol) server that provides integration with Azure DevOps, allowing AI assistants to interact with Azure DevOps work items, pull requests, and wikis.
 
 ## Features
 
-### Resources
-- List and access notes via `note://` URIs
-- Each note has a title, content and metadata
-- Plain text mime type for simple content access
+- Work Items Management (create, list, get)
+- Pull Request Operations (create, list, get, comment, diff)
+- Wiki Page Management (create, edit)
 
-### Tools
-- `create_note` - Create new text notes
-  - Takes title and content as required parameters
-  - Stores note in server state
+## Setup
 
-### Prompts
-- `summarize_notes` - Generate a summary of all stored notes
-  - Includes all note contents as embedded resources
-  - Returns structured prompt for LLM summarization
-
-## Development
-
-Install dependencies:
+1. Install dependencies:
 ```bash
 npm install
 ```
 
-Build the server:
+2. Configure environment variables (create a .env file):
+```env
+AZURE_DEVOPS_ORG_URL=https://dev.azure.com/your-org
+AZURE_DEVOPS_PAT=your-personal-access-token
+AZURE_DEVOPS_PROJECT=default-project
+AZURE_DEVOPS_REPOSITORY=default-repo
+```
+
+3. Build the server:
 ```bash
 npm run build
 ```
 
-For development with auto-rebuild:
-```bash
-npm run watch
-```
-
 ## Installation
 
-To use with Claude Desktop, add the server config:
+Add the server configuration to your MCP settings:
 
-On MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
-
+### For VSCode
+Add to `~/.vscode/cline_mcp_settings.json`:
 ```json
 {
   "mcpServers": {
     "azure-devops": {
-      "command": "/path/to/azure-devops/build/index.js"
+      "command": "node",
+      "args": ["/path/to/azure-devops-mcp/build/index.js"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "your-org-url",
+        "AZURE_DEVOPS_PAT": "your-pat",
+        "AZURE_DEVOPS_PROJECT": "your-project",
+        "AZURE_DEVOPS_REPOSITORY": "your-repo"
+      },
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }
 ```
 
-### Debugging
+### For Claude Desktop
+Add to:
+- MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 
-Since MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:
+## Available Tools
 
-```bash
-npm run inspector
+### Work Items
+
+#### list_work_items
+Lists work items in a project.
+```typescript
+{
+  "project": string,        // Required
+  "types"?: string[],      // Optional: Filter by work item types
+  "states"?: string[],     // Optional: Filter by states
+  "assignedTo"?: string    // Optional: Filter by assigned user
+}
 ```
 
-The Inspector will provide a URL to access debugging tools in your browser.
+#### get_work_item
+Get details of a specific work item.
+```typescript
+{
+  "project": string,       // Required
+  "id": number            // Required: Work item ID
+}
+```
+
+#### create_work_item
+Create a new work item.
+```typescript
+{
+  "project": string,       // Required
+  "type": string,         // Required: e.g., "Task", "Bug"
+  "title": string,        // Required
+  "description"?: string, // Optional
+  "assignedTo"?: string  // Optional
+}
+```
+
+### Pull Requests
+
+#### list_pull_requests
+List pull requests in a repository.
+```typescript
+{
+  "status"?: "active" | "completed" | "abandoned"  // Optional
+}
+```
+
+#### get_pull_request
+Get details of a specific pull request.
+```typescript
+{
+  "pullRequestId": number  // Required
+}
+```
+
+#### create_pull_request
+Create a new pull request.
+```typescript
+{
+  "title": string,         // Required
+  "description": string,   // Required
+  "sourceBranch": string, // Required
+  "targetBranch": string, // Required
+  "reviewers"?: string[]  // Optional: Array of reviewer email addresses
+}
+```
+
+#### create_pull_request_comment
+Add a comment to a pull request.
+```typescript
+{
+  "pullRequestId": number,                                      // Required
+  "content": string,                                           // Required
+  "threadId"?: number,                                         // Optional: For replies
+  "filePath"?: string,                                         // Optional: For file comments
+  "lineNumber"?: number,                                       // Optional: For line comments
+  "status"?: "active"|"fixed"|"pending"|"wontfix"|"closed"    // Optional: Thread status
+}
+```
+
+#### get_pull_request_diff
+Get the diff for a pull request.
+```typescript
+{
+  "pullRequestId": number,  // Required
+  "filePath"?: string,     // Optional: Specific file to get diff for
+  "iterationId"?: number   // Optional: Specific iteration to get diff for
+}
+```
+
+### Wiki
+
+#### create_wiki_page
+Create a new wiki page.
+```typescript
+{
+  "project": string,    // Required
+  "wiki": string,      // Required
+  "path": string,      // Required
+  "content": string    // Required
+}
+```
+
+#### edit_wiki_page
+Edit an existing wiki page.
+```typescript
+{
+  "project": string,    // Required
+  "wiki": string,      // Required
+  "path": string,      // Required
+  "content": string,   // Required
+  "etag": string       // Required: For concurrency control
+}
+```
+
+## Development
+
+Run in development mode with environment variables:
+```bash
+npm run dev
+```
+
+## Note
+
+Unless explicitly specified in the tool arguments, the `project` and `repository` parameters will use default values from your environment configuration.

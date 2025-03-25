@@ -4,8 +4,6 @@ import { z } from "zod";
  * Schema for listing pull requests
  */
 export const listPullRequestsSchema = z.object({
-  project: z.string(),
-  repository: z.string(),
   status: z.enum(["active", "completed", "abandoned"]).optional(),
 });
 
@@ -15,8 +13,6 @@ export type ListPullRequestsParams = z.infer<typeof listPullRequestsSchema>;
  * Schema for getting a pull request
  */
 export const getPullRequestSchema = z.object({
-  project: z.string(),
-  repository: z.string(),
   pullRequestId: z.number(),
 });
 
@@ -26,8 +22,6 @@ export type GetPullRequestParams = z.infer<typeof getPullRequestSchema>;
  * Schema for creating a pull request
  */
 export const createPullRequestSchema = z.object({
-  project: z.string(),
-  repository: z.string(),
   title: z.string(),
   description: z.string(),
   sourceBranch: z.string(),
@@ -41,8 +35,6 @@ export type CreatePullRequestParams = z.infer<typeof createPullRequestSchema>;
  * Schema for creating a pull request comment
  */
 export const createPullRequestCommentSchema = z.object({
-  project: z.string(),
-  repository: z.string(),
   pullRequestId: z.number(),
   content: z.string(),
   threadId: z.number().optional(), // For replying to existing threads
@@ -61,8 +53,6 @@ export type CreatePullRequestCommentParams = z.infer<
  * Schema for getting pull request diff
  */
 export const getPullRequestDiffSchema = z.object({
-  project: z.string(),
-  repository: z.string(),
   pullRequestId: z.number(),
   filePath: z.string().optional(), // For specific file diffs
   iterationId: z.number().optional(), // For specific iteration

@@ -21,8 +21,6 @@ import {
 export async function listPullRequests(rawParams: any) {
   // Parse arguments with defaults from environment variables
   const params = listPullRequestsSchema.parse({
-    project: rawParams.project || DEFAULT_PROJECT,
-    repository: rawParams.repository || DEFAULT_REPOSITORY,
     status: rawParams.status,
   });
 
@@ -49,10 +47,14 @@ export async function listPullRequests(rawParams: any) {
     }
 
     // Get pull requests
+    if (!DEFAULT_PROJECT || !DEFAULT_REPOSITORY) {
+      throw new Error("Default project and repository must be configured");
+    }
+
     const pullRequests = await gitClient.getPullRequests(
-      params.repository,
+      DEFAULT_REPOSITORY,
       { status: statusId },
-      params.project
+      DEFAULT_PROJECT
     );
 
     console.error(`[API] Found ${pullRequests.length} pull requests`);
@@ -77,8 +79,6 @@ export async function listPullRequests(rawParams: any) {
 export async function getPullRequest(rawParams: any) {
   // Parse arguments with defaults from environment variables
   const params = getPullRequestSchema.parse({
-    project: rawParams.project || DEFAULT_PROJECT,
-    repository: rawParams.repository || DEFAULT_REPOSITORY,
     pullRequestId: rawParams.pullRequestId,
   });
 
@@ -91,7 +91,7 @@ export async function getPullRequest(rawParams: any) {
     // Get pull request details
     const pullRequest = await gitClient.getPullRequestById(
       params.pullRequestId,
-      params.project
+      DEFAULT_PROJECT
     );
 
     console.error(`[API] Found pull request: ${pullRequest.pullRequestId}`);
@@ -116,8 +116,6 @@ export async function getPullRequest(rawParams: any) {
 export async function createPullRequest(rawParams: any) {
   // Parse arguments with defaults from environment variables
   const params = createPullRequestSchema.parse({
-    project: rawParams.project || DEFAULT_PROJECT,
-    repository: rawParams.repository || DEFAULT_REPOSITORY,
     title: rawParams.title,
     description: rawParams.description,
     sourceBranch: rawParams.sourceBranch,
@@ -141,6 +139,10 @@ export async function createPullRequest(rawParams: any) {
       : `refs/heads/${params.targetBranch}`;
 
     // Create pull request
+    if (!DEFAULT_PROJECT || !DEFAULT_REPOSITORY) {
+      throw new Error("Default project and repository must be configured");
+    }
+
     const pullRequest = await gitClient.createPullRequest(
       {
         sourceRefName: sourceBranch,
@@ -151,8 +153,8 @@ export async function createPullRequest(rawParams: any) {
           ? params.reviewers.map((email) => ({ id: email }))
           : undefined,
       },
-      params.repository,
-      params.project
+      DEFAULT_REPOSITORY,
+      DEFAULT_PROJECT
     );
 
     console.error(`[API] Created pull request: ${pullRequest.pullRequestId}`);
@@ -177,8 +179,6 @@ export async function createPullRequest(rawParams: any) {
 export async function createPullRequestComment(rawParams: any) {
   // Parse arguments with defaults from environment variables
   const params = createPullRequestCommentSchema.parse({
-    project: rawParams.project || DEFAULT_PROJECT,
-    repository: rawParams.repository || DEFAULT_REPOSITORY,
     pullRequestId: rawParams.pullRequestId,
     content: rawParams.content,
     threadId: rawParams.threadId,
@@ -202,7 +202,7 @@ export async function createPullRequestComment(rawParams: any) {
         parentCommentId: 0, // Root-level comment in thread
       };
 
-      const commentUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/threads/${params.threadId}/comments?api-version=7.1-preview.1`;
+      const commentUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads/${params.threadId}/comments?api-version=7.1-preview.1`;
       const result = await makeAzureDevOpsRequest(commentUrl, "POST", comment);
 
       return {
@@ -232,7 +232,7 @@ export async function createPullRequestComment(rawParams: any) {
         );
 
         // Get the latest iteration of the pull request
-        const iterationsUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
+        const iterationsUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
         const iterations = await makeAzureDevOpsRequest(iterationsUrl);
         const latestIteration =
           iterations.value.length > 0
@@ -273,7 +273,7 @@ export async function createPullRequestComment(rawParams: any) {
       }
 
       // Create the new thread
-      const threadUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/threads?api-version=7.1-preview.1`;
+      const threadUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads?api-version=7.1-preview.1`;
       const result = await makeAzureDevOpsRequest(threadUrl, "POST", thread);
 
       return {
@@ -296,8 +296,6 @@ export async function createPullRequestComment(rawParams: any) {
 export async function getPullRequestDiff(rawParams: any) {
   // Parse arguments with defaults from environment variables
   const params = getPullRequestDiffSchema.parse({
-    project: rawParams.project || DEFAULT_PROJECT,
-    repository: rawParams.repository || DEFAULT_REPOSITORY,
     pullRequestId: rawParams.pullRequestId,
     filePath: rawParams.filePath,
     iterationId: rawParams.iterationId,
@@ -312,7 +310,7 @@ export async function getPullRequestDiff(rawParams: any) {
     // Get pull request details first to get source and target commits
     const pullRequest = await gitClient.getPullRequestById(
       params.pullRequestId,
-      params.project
+      DEFAULT_PROJECT
     );
 
     // Check for missing sourceRefName or targetRefName
@@ -342,7 +340,7 @@ export async function getPullRequestDiff(rawParams: any) {
     }
 
     // Get the iterations to find the latest one if not specified
-    const iterationsUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
+    const iterationsUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
     const iterations = await makeAzureDevOpsRequest(iterationsUrl);
     const iterationId =
       params.iterationId ||
@@ -351,7 +349,7 @@ export async function getPullRequestDiff(rawParams: any) {
         : 1);
 
     // Get the changes for this iteration
-    let changesUrl = `${ORG_URL}/${params.project}/_apis/git/repositories/${params.repository}/pullRequests/${params.pullRequestId}/iterations/${iterationId}/changes?api-version=7.1-preview.1`;
+    let changesUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations/${iterationId}/changes?api-version=7.1-preview.1`;
     if (params.filePath) {
       changesUrl += `&path=${encodeURIComponent(params.filePath)}`;
     }
@@ -371,8 +369,6 @@ export async function getPullRequestDiff(rawParams: any) {
           fullDiff += `+++ b${change.item.path}\n`;
 
           const content = await getFileContent(
-            params.project,
-            params.repository,
             change.item.path,
             sourceBranch
           );
@@ -392,8 +388,6 @@ export async function getPullRequestDiff(rawParams: any) {
           fullDiff += `+++ /dev/null\n`;
 
           const content = await getFileContent(
-            params.project,
-            params.repository,
             change.item.path,
             targetBranch
           );
@@ -414,14 +408,10 @@ export async function getPullRequestDiff(rawParams: any) {
           fullDiff += `+++ b${change.item.path}\n`;
 
           const oldContent = await getFileContent(
-            params.project,
-            params.repository,
             change.item.path,
             targetBranch
           );
           const newContent = await getFileContent(
-            params.project,
-            params.repository,
             change.item.path,
             sourceBranch
           );
@@ -458,13 +448,14 @@ export async function getPullRequestDiff(rawParams: any) {
 }
 // Helper function to get file content
 async function getFileContent(
-  project: string,
-  repository: string,
   path: string,
   version: string
 ): Promise<string> {
+  if (!DEFAULT_PROJECT || !DEFAULT_REPOSITORY) {
+    throw new Error("Default project and repository must be configured");
+  }
   try {
-    const itemUrl = `${ORG_URL}/${project}/_apis/git/repositories/${repository}/items?path=${encodeURIComponent(
+    const itemUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/items?path=${encodeURIComponent(
       path
     )}&versionType=branch&version=${encodeURIComponent(
       version
@@ -521,21 +512,13 @@ export const pullRequestTools = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description: "Name of the Azure DevOps project",
-        },
-        repository: {
-          type: "string",
-          description: "Name of the repository",
-        },
         status: {
           type: "string",
           enum: ["active", "completed", "abandoned"],
           description: "Filter by PR status",
         },
       },
-      required: ["project", "repository"],
+      required: [],
     },
   },
   {
@@ -544,20 +527,12 @@ export const pullRequestTools = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description: "Name of the Azure DevOps project",
-        },
-        repository: {
-          type: "string",
-          description: "Name of the repository",
-        },
         pullRequestId: {
           type: "number",
           description: "ID of the pull request",
         },
       },
-      required: ["project", "repository", "pullRequestId"],
+      required: ["pullRequestId"],
     },
   },
   {
@@ -566,14 +541,6 @@ export const pullRequestTools = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description: "Name of the Azure DevOps project",
-        },
-        repository: {
-          type: "string",
-          description: "Name of the repository",
-        },
         title: {
           type: "string",
           description: "Title of the pull request",
@@ -597,8 +564,6 @@ export const pullRequestTools = [
         },
       },
       required: [
-        "project",
-        "repository",
         "title",
         "description",
         "sourceBranch",
@@ -612,14 +577,6 @@ export const pullRequestTools = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description: "Name of the Azure DevOps project",
-        },
-        repository: {
-          type: "string",
-          description: "Name of the repository",
-        },
         pullRequestId: {
           type: "number",
           description: "ID of the pull request",
@@ -646,7 +603,7 @@ export const pullRequestTools = [
           description: "Thread status (optional)",
         },
       },
-      required: ["project", "repository", "pullRequestId", "content"],
+      required: ["pullRequestId", "content"],
     },
   },
   {
@@ -655,14 +612,6 @@ export const pullRequestTools = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description: "Name of the Azure DevOps project",
-        },
-        repository: {
-          type: "string",
-          description: "Name of the repository",
-        },
         pullRequestId: {
           type: "number",
           description: "ID of the pull request",
@@ -676,7 +625,7 @@ export const pullRequestTools = [
           description: "Specific iteration to get diff for (optional)",
         },
       },
-      required: ["project", "repository", "pullRequestId"],
+      required: ["pullRequestId"],
     },
   },
 ];
