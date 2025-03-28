@@ -30,7 +30,6 @@ import {
 } from "./tools/pullRequests.js";
 
 import { createWikiPage, editWikiPage, wikiTools } from "./tools/wiki.js";
-import { listProjects, projectTools } from "./tools/projects.js";
 
 // Create MCP server
 const server = new Server(
@@ -55,8 +54,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       ...pullRequestTools,
       // Wiki
       ...wikiTools,
-      // // Projects
-      // ...projectTools,
     ],
   };
 });
@@ -89,18 +86,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await createWikiPage(request.params.arguments || {});
       case "edit_wiki_page":
         return await editWikiPage(request.params.arguments || {});
-
-      // Projects
-      case "list_projects":
-        const projects = await listProjects(request.params.arguments || {});
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(projects, null, 2),
-            },
-          ],
-        };
 
       default:
         throw new McpError(
