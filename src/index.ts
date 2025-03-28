@@ -55,8 +55,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       ...pullRequestTools,
       // Wiki
       ...wikiTools,
-      // Projects
-      ...projectTools,
+      // // Projects
+      // ...projectTools,
     ],
   };
 });
@@ -89,15 +89,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await createWikiPage(request.params.arguments || {});
       case "edit_wiki_page":
         return await editWikiPage(request.params.arguments || {});
-        
+
       // Projects
       case "list_projects":
         const projects = await listProjects(request.params.arguments || {});
         return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(projects, null, 2)
-          }]
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(projects, null, 2),
+            },
+          ],
         };
 
       default:
