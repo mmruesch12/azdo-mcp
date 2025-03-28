@@ -1,6 +1,5 @@
 import { DEFAULT_PROJECT } from "../config/env.js";
 import { getWorkItemClient } from "../auth/client.js";
-import { makeAzureDevOpsRequest } from "../utils/api.js";
 import { logError } from "../utils/error.js";
 import {
   listWorkItemsSchema,
@@ -10,6 +9,7 @@ import {
   type GetWorkItemParams,
   type CreateWorkItemParams,
 } from "../schemas/workItems.js";
+import * as WorkItemInterfaces from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 
 /**
  * List work items in a project
@@ -26,17 +26,47 @@ export async function listWorkItems(rawParams: any) {
   console.error("[API] Listing work items:", params);
 
   try {
-    // Implementation would go here
-    // This is a placeholder as the original code didn't have a complete implementation
+    // Get the Work Item Tracking API client
+    const witClient = await getWorkItemClient();
+
+    // Build WIQL query
+    let wiql = `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType], [System.AssignedTo] FROM WorkItems WHERE [System.TeamProject] = '${params.project}'`;
+
+    if (params.types && params.types.length > 0) {
+      wiql += ` AND [System.WorkItemType] IN ('${params.types.join("','")}')`;
+    }
+
+    if (params.states && params.states.length > 0) {
+      wiql += ` AND [System.State] IN ('${params.states.join("','")}')`;
+    }
+
+    if (params.assignedTo) {
+      wiql += ` AND [System.AssignedTo] = '${params.assignedTo}'`;
+    }
+
+    // Execute the query
+    const queryResult = await witClient.queryByWiql({ query: wiql });
+
+    if (!queryResult.workItems) {
+      return {
+        content: [{ type: "text", text: JSON.stringify([], null, 2) }],
+      };
+    }
+
+    // Get full work item details
+    const workItems = await witClient.getWorkItems(
+      queryResult.workItems.map(
+        (wi: WorkItemInterfaces.WorkItemReference) => wi.id!
+      ),
+      undefined,
+      undefined
+    );
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(
-            { message: "Work items listing not implemented yet" },
-            null,
-            2
-          ),
+          text: JSON.stringify(workItems, null, 2),
         },
       ],
     };
@@ -59,17 +89,21 @@ export async function getWorkItem(rawParams: any) {
   console.error("[API] Getting work item details:", params);
 
   try {
-    // Implementation would go here
-    // This is a placeholder as the original code didn't have a complete implementation
+    // Get the Work Item Tracking API client
+    const witClient = await getWorkItemClient();
+
+    // Get work item details
+    const workItem = await witClient.getWorkItem(
+      params.id,
+      undefined,
+      undefined
+    );
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(
-            { message: "Get work item not implemented yet" },
-            null,
-            2
-          ),
+          text: JSON.stringify(workItem, null, 2),
         },
       ],
     };
@@ -95,17 +129,47 @@ export async function createWorkItem(rawParams: any) {
   console.error("[API] Creating work item:", params);
 
   try {
-    // Implementation would go here
-    // This is a placeholder as the original code didn't have a complete implementation
+    // Get the Work Item Tracking API client
+    const witClient = await getWorkItemClient();
+
+    // Create patch operations for the work item
+    const patchOperations = [
+      {
+        op: "add",
+        path: "/fields/System.Title",
+        value: params.title,
+      },
+    ];
+
+    if (params.description) {
+      patchOperations.push({
+        op: "add",
+        path: "/fields/System.Description",
+        value: params.description,
+      });
+    }
+
+    if (params.assignedTo) {
+      patchOperations.push({
+        op: "add",
+        path: "/fields/System.AssignedTo",
+        value: params.assignedTo,
+      });
+    }
+
+    // Create the work item
+    const workItem = await witClient.createWorkItem(
+      undefined,
+      patchOperations,
+      params.project,
+      params.type
+    );
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(
-            { message: "Create work item not implemented yet" },
-            null,
-            2
-          ),
+          text: JSON.stringify(workItem, null, 2),
         },
       ],
     };

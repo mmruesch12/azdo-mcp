@@ -21,3 +21,8 @@ export async function getWikiClient() {
   console.error("[Auth] Getting Wiki API client");
   return await connection.getWikiApi();
 }
+
+export async function getCoreClient() {
+  console.error("[Auth] Getting Core API client");
+  return await connection.getCoreApi();
+}
