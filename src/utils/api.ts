@@ -46,8 +46,21 @@ export async function makeAzureDevOpsRequest(
     }
 
     if (responseText) {
-      return JSON.parse(responseText);
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          // If content type is JSON, parse it
+          return JSON.parse(responseText);
+        } catch (parseError) {
+          console.error(`[API] Failed to parse JSON response despite content-type:`, parseError);
+          throw new Error(`API response indicated JSON but failed to parse: ${responseText.substring(0, 100)}...`);
+        }
+      } else {
+        // Otherwise, return the raw text content
+        return responseText;
+      }
     }
+    // Return null if response body is empty
     return null;
   } catch (error) {
     console.error(`[API] Request failed:`, error);

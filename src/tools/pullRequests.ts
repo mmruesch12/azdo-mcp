@@ -2,6 +2,7 @@ import { DEFAULT_PROJECT, DEFAULT_REPOSITORY, ORG_URL } from "../config/env.js";
 import { getGitClient } from "../auth/client.js";
 import { makeAzureDevOpsRequest } from "../utils/api.js";
 import { logError } from "../utils/error.js";
+import * as Diff from "diff";
 import {
   listPullRequestsSchema,
   getPullRequestSchema,
@@ -239,6 +240,7 @@ export async function createPullRequestComment(rawParams: any) {
             ? iterations.value[iterations.value.length - 1].id
             : 1;
 
+
         // Ensure file path starts with "/"
         const normalizedFilePath = params.filePath.startsWith("/")
           ? params.filePath
@@ -360,53 +362,38 @@ export async function getPullRequestDiff(rawParams: any) {
 
     if (changes.changeEntries && changes.changeEntries.length > 0) {
       for (const change of changes.changeEntries) {
-        fullDiff += `\ndiff --git a${change.item.path} b${change.item.path}\n`;
+        const oldPath = `a${change.item.path}`;
+        const newPath = `b${change.item.path}`;
+        let patch = "";
 
         if (change.changeType === "add") {
-          fullDiff += `new file mode 100644\n`;
-          fullDiff += `index 0000000..${change.item.objectId || "unknown"}\n`;
-          fullDiff += `--- /dev/null\n`;
-          fullDiff += `+++ b${change.item.path}\n`;
-
-          const content = await getFileContent(
+          const newContent = await getFileContent(
             change.item.path,
             sourceBranch
           );
-          if (content) {
-            fullDiff +=
-              content
-                .split("\n")
-                .map((line) => `+${line}`)
-                .join("\n") + "\n";
-          } else {
-            fullDiff += `+<Unable to retrieve file content>\n`;
-          }
+          patch = generateUnifiedDiff(
+            oldPath, // Represents /dev/null effectively
+            newPath,
+            "", // Old content is empty for add
+            newContent || "<Unable to retrieve file content>",
+            change.item.objectId || "unknown",
+            true // Indicate it's a new file
+          );
         } else if (change.changeType === "delete") {
-          fullDiff += `deleted file mode 100644\n`;
-          fullDiff += `index ${change.item.objectId || "unknown"}..0000000\n`;
-          fullDiff += `--- a${change.item.path}\n`;
-          fullDiff += `+++ /dev/null\n`;
-
-          const content = await getFileContent(
+          const oldContent = await getFileContent(
             change.item.path,
             targetBranch
           );
-          if (content) {
-            fullDiff +=
-              content
-                .split("\n")
-                .map((line) => `-${line}`)
-                .join("\n") + "\n";
-          } else {
-            fullDiff += `-<Unable to retrieve file content>\n`;
-          }
+          patch = generateUnifiedDiff(
+            oldPath,
+            newPath, // Represents /dev/null effectively
+            oldContent || "<Unable to retrieve file content>",
+            "", // New content is empty for delete
+            change.item.objectId || "unknown",
+            false,
+            true // Indicate it's a deleted file
+          );
         } else if (change.changeType === "edit") {
-          fullDiff += `index ${change.item.objectId || "unknown"}..${
-            change.item.objectId || "unknown"
-          } 100644\n`;
-          fullDiff += `--- a${change.item.path}\n`;
-          fullDiff += `+++ b${change.item.path}\n`;
-
           const oldContent = await getFileContent(
             change.item.path,
             targetBranch
@@ -416,17 +403,21 @@ export async function getPullRequestDiff(rawParams: any) {
             sourceBranch
           );
 
-          if (oldContent && newContent) {
-            fullDiff += generateUnifiedDiff(oldContent, newContent);
-          } else {
-            fullDiff += `@@ -1,1 +1,1 @@\n`;
-            fullDiff += oldContent
-              ? `-${oldContent.split("\n")[0]}\n`
-              : `-<Unable to retrieve old content>\n`;
-            fullDiff += newContent
-              ? `+${newContent.split("\n")[0]}\n`
-              : `+<Unable to retrieve new content>\n`;
-          }
+          // Handle cases where content retrieval might fail
+          const oldContentStr = oldContent || "<Unable to retrieve old content>";
+          const newContentStr = newContent || "<Unable to retrieve new content>";
+
+          patch = generateUnifiedDiff(
+            oldPath,
+            newPath,
+            oldContentStr,
+            newContentStr,
+            change.item.objectId || "unknown" // Use objectId for index line if available
+          );
+        }
+        // Ensure a newline separates patches for different files
+        if (patch) {
+          fullDiff += patch + "\n";
         }
       }
     } else {
@@ -460,13 +451,28 @@ async function getFileContent(
     )}&versionType=branch&version=${encodeURIComponent(
       version
     )}&api-version=7.1-preview.1`;
-    const response = await makeAzureDevOpsRequest(itemUrl);
+    const headers = { Accept: "application/octet-stream" };
+    const response = await makeAzureDevOpsRequest(itemUrl, "GET", undefined, headers);
+    // Add detailed logging to inspect the response
+    console.error(
+      `[API] Response received in getFileContent for ${path} (version: ${version}):`,
+      `Type: ${typeof response}`,
+      `Value Preview: ${response ? JSON.stringify(response).substring(0, 200) + "..." : "null or undefined"}`
+    );
 
     if (response && typeof response === "object" && response.content) {
+      console.error(`[API] getFileContent returning object content for ${path}`);
       return response.content;
     } else if (typeof response === "string") {
+       // Check if the string indicates an error we missed
+       if (response.startsWith('<') && response.endsWith('>')) {
+         console.error(`[API] getFileContent received potential error string: ${response}`);
+         return ""; // Treat placeholder errors as empty
+       }
+      console.error(`[API] getFileContent returning string content for ${path}`);
       return response;
     }
+    console.error(`[API] getFileContent returning empty string for ${path} because response was not handled.`);
     return "";
   } catch (error) {
     console.error(`[API] Error fetching file content for ${path}:`, error);
@@ -475,32 +481,81 @@ async function getFileContent(
 }
 
 // Helper function to generate unified diff
-function generateUnifiedDiff(oldContent: string, newContent: string): string {
-  const oldLines = oldContent.split("\n");
-  const newLines = newContent.split("\n");
-  let diffLines: string[] = [];
+function generateUnifiedDiff(
+  oldPath: string,
+  newPath: string,
+  oldContent: string,
+  newContent: string,
+  objectId?: string, // Optional object ID for index line
+  isNewFile: boolean = false,
+  isDeletedFile: boolean = false
+): string {
+  // Use createPatch from the 'diff' library
+  const patch = Diff.createPatch(
+    oldPath, // File name for the patch header
+    oldContent,
+    newContent,
+    "", // oldHeader - not typically needed here
+    "", // newHeader - not typically needed here
+    { context: 3 } // Number of context lines, standard is 3
+  );
 
-  // Simple line-by-line comparison (could be improved with a proper diff algorithm)
-  const maxLines = Math.max(oldLines.length, newLines.length);
+  // The createPatch function includes the --- and +++ lines.
+  // We need to potentially add the git diff header, index, and mode lines manually
+  // if the library doesn't format it exactly like `git diff`.
 
-  for (let i = 0; i < maxLines; i++) {
-    const oldLine = i < oldLines.length ? oldLines[i] : "";
-    const newLine = i < newLines.length ? newLines[i] : "";
+  // Let's analyze the output of createPatch and adjust if needed.
+  // Often, createPatch output looks like:
+  // Index: filename
+  // ===================================================================
+  // --- filename
+  // +++ filename
+  // @@ ... @@
+  // ... diff lines ...
 
-    if (oldLine === newLine) {
-      diffLines.push(` ${oldLine}`);
-    } else {
-      if (oldLine) diffLines.push(`-${oldLine}`);
-      if (newLine) diffLines.push(`+${newLine}`);
+  // We want the standard git diff header format:
+  // diff --git a/path b/path
+  // index oldsha..newsha mode (optional)
+  // --- a/path
+  // +++ b/path
+  // @@ ... @@
+  // ... diff lines ...
+
+  let gitDiffHeader = `diff --git ${oldPath} ${newPath}\n`;
+  if (isNewFile) {
+    gitDiffHeader += `new file mode 100644\n`;
+    gitDiffHeader += `index 0000000..${objectId || "new"}\n`;
+  } else if (isDeletedFile) {
+    gitDiffHeader += `deleted file mode 100644\n`;
+    gitDiffHeader += `index ${objectId || "old"}..0000000\n`;
+  } else if (objectId) {
+    // For edits, the library might not know the SHAs, so we add a basic index line
+    // A more accurate approach would involve fetching commit SHAs if needed, but objectId is a start.
+    gitDiffHeader += `index ${objectId}..${objectId} 100644\n`; // Placeholder SHAs
+  }
+
+  // Remove the library's default header lines if they exist and prepend our own.
+  const patchLines = patch.split("\n");
+  let startIndex = 0;
+  // Find the start of the actual diff content (--- line)
+  for (let i = 0; i < patchLines.length; i++) {
+    if (patchLines[i].startsWith("---")) {
+      startIndex = i;
+      break;
     }
+     // Handle cases where createPatch might return minimal output for no changes
+     if (i === patchLines.length - 1) {
+        return ""; // No actual diff content found
+     }
   }
 
-  // Add basic hunk header
-  if (diffLines.length > 0) {
-    const hunkHeader = `@@ -1,${oldLines.length} +1,${newLines.length} @@\n`;
-    return hunkHeader + diffLines.join("\n") + "\n";
-  }
-  return "";
+
+  const corePatch = patchLines.slice(startIndex).join("\n");
+
+  // Ensure the patch ends with a newline if it contains content
+  const finalPatch = corePatch.trim() ? gitDiffHeader + corePatch + (corePatch.endsWith('\n') ? '' : '\n') : "";
+
+  return finalPatch;
 }
 /**
  * Tool definitions for pull requests
