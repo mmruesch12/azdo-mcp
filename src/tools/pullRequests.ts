@@ -203,7 +203,7 @@ export async function createPullRequestComment(rawParams: any) {
         parentCommentId: 0, // Root-level comment in thread
       };
 
-      const commentUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads/${params.threadId}/comments?api-version=7.1-preview.1`;
+      const commentUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads/${params.threadId}/comments?api-version=7.0`;
       const result = await makeAzureDevOpsRequest(commentUrl, "POST", comment);
 
       return {
@@ -232,50 +232,121 @@ export async function createPullRequestComment(rawParams: any) {
           `[API] Creating code comment on file: ${params.filePath}`
         );
 
-        // Get the latest iteration of the pull request
+        // Get iterations in ascending order
         const iterationsUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
-        const iterations = await makeAzureDevOpsRequest(iterationsUrl);
-        const latestIteration =
-          iterations.value.length > 0
-            ? iterations.value[iterations.value.length - 1].id
-            : 1;
+        const iterationsResponse = await makeAzureDevOpsRequest(iterationsUrl);
+        
+        if (!iterationsResponse.value || iterationsResponse.value.length === 0) {
+          throw new Error("No iterations found for pull request");
+        }
 
+        // Normalize file path
+        const normalizedPath = params.filePath.replace(/^\/+/, '');
+        console.error(`[API] Looking for file: ${normalizedPath}`);
 
-        // Ensure file path starts with "/"
-        const normalizedFilePath = params.filePath.startsWith("/")
-          ? params.filePath
-          : `/${params.filePath}`;
+        // Find the iteration where the file existed
+        let targetIteration = null;
+        let targetFileChange = null;
 
-        // Add thread context for file and line-specific comments
+        for (const iteration of iterationsResponse.value) {
+          console.error(`[API] Checking iteration ${iteration.id}`);
+          const changesUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations/${iteration.id}/changes?api-version=7.1-preview.1`;
+          const changes = await makeAzureDevOpsRequest(changesUrl);
+
+          console.error(`[API] Iteration ${iteration.id} changes:`, JSON.stringify(changes.changeEntries?.map((c: any) => c.item?.path), null, 2));
+
+          // Try different path formats
+          const pathVariations = [
+            normalizedPath,
+            normalizedPath.replace(/^\/+/, ''),
+            `/${normalizedPath}`,
+            normalizedPath.toLowerCase(),
+            normalizedPath.replace(/^\/+/, '').toLowerCase()
+          ];
+
+          console.error(`[API] Trying path variations:`, pathVariations);
+
+          const fileChange = changes.changeEntries?.find((change: { item?: { path?: string } }) => {
+            const changePath = change.item?.path || '';
+            const match = pathVariations.some(p => changePath.toLowerCase() === p.toLowerCase());
+            if (match) {
+              console.error(`[API] Found match: ${changePath} matches ${pathVariations.find(p => changePath.toLowerCase() === p.toLowerCase())}`);
+            }
+            return match;
+          });
+
+          if (fileChange) {
+            targetIteration = iteration;
+            targetFileChange = fileChange;
+            console.error(`[API] Found file in iteration ${iteration.id} with path ${fileChange.item.path}`);
+            break;
+          }
+        }
+
+        if (!targetIteration || !targetFileChange) {
+          throw new Error(`File ${normalizedPath} not found in any iteration`);
+        }
+
+        // Create thread with file position
         thread.threadContext = {
-          filePath: normalizedFilePath,
-          rightFileStart: params.lineNumber
-            ? {
-                line: params.lineNumber,
-                offset: 1, // Start at beginning of line
-              }
-            : undefined,
-          rightFileEnd: params.lineNumber
-            ? {
-                line: params.lineNumber,
-                offset: 1, // End at beginning of line (single line comment)
-              }
-            : undefined,
+          filePath: normalizedPath,
+          rightFileStart: {
+            line: params.lineNumber,
+            offset: 1
+          },
+          rightFileEnd: {
+            line: params.lineNumber,
+            offset: 1
+          }
         };
 
+        // Set up the thread with version information
+        const targetIterationId = Number(targetIteration.id);
+        console.error(`[API] Using iteration ${targetIterationId} with change ID ${targetFileChange.changeTrackingId}`);
+
+        // Set thread properties for version control
+        thread.properties = {
+          "Microsoft.TeamFoundation.Discussion.SourceCommitId": {
+            $type: "System.String",
+            $value: targetFileChange.item.commitId
+          },
+          "Microsoft.TeamFoundation.Discussion.TargetCommitId": {
+            $type: "System.String",
+            $value: targetFileChange.item.commitId
+          },
+          "Microsoft.TeamFoundation.Discussion.Iteration": {
+            $type: "System.String",
+            $value: targetIterationId.toString()
+          }
+        };
+
+        // Set iteration context
         thread.pullRequestThreadContext = {
           iterationContext: {
-            firstComparingIteration: latestIteration,
-            secondComparingIteration: latestIteration,
+            firstComparingIteration: targetIterationId,
+            secondComparingIteration: targetIterationId
           },
-          changeTrackingId: latestIteration, // Helps track the change context
+          changeTrackingId: targetFileChange.changeTrackingId
         };
+
+        thread.comments = [{
+          parentCommentId: 0,
+          content: params.content,
+          commentType: 1
+        }];
+
+        thread.status = "active";
+
+        console.error('[API] Thread context:', JSON.stringify({
+          iteration: targetIteration.id,
+          changeTracking: targetFileChange.changeTrackingId
+        }, null, 2));
       } else {
         console.error("[API] Creating general PR comment");
       }
 
       // Create the new thread
-      const threadUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads?api-version=7.1-preview.1`;
+      const threadUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads?api-version=7.0`;
       const result = await makeAzureDevOpsRequest(threadUrl, "POST", thread);
 
       return {
