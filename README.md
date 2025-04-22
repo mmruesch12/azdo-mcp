@@ -33,7 +33,9 @@ npm run build
 Add the server configuration to your MCP settings:
 
 ### For VSCode
-Add to `~/.vscode/cline_mcp_settings.json`:
+
+#### On macOS/Linux
+Add to `~/.vscode/cline_mcp_settings.json` or the Cursor/Roo equivalent:
 ```json
 {
   "mcpServers": {
@@ -53,10 +55,26 @@ Add to `~/.vscode/cline_mcp_settings.json`:
 }
 ```
 
-### For Claude Desktop
-Add to:
-- MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%/Claude/claude_desktop_config.json`
+#### On Windows
+Add to `%USERPROFILE%\.vscode\cline_mcp_settings.json` or the Cursor/Roo equivalent:
+```json
+{
+  "mcpServers": {
+    "azure-devops": {
+      "command": "node",
+      "args": ["C:/path/to/azure-devops-mcp/build/index.js"],
+      "env": {
+        "AZURE_DEVOPS_ORG_URL": "your-org-url",
+        "AZURE_DEVOPS_PAT": "your-pat",
+        "AZURE_DEVOPS_PROJECT": "your-project",
+        "AZURE_DEVOPS_REPOSITORY": "your-repo"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
 
 ## Available Tools
 
