@@ -124,22 +124,55 @@ export async function createWorkItem(rawParams: any) {
     title: rawParams.title,
     description: rawParams.description,
     assignedTo: rawParams.assignedTo,
+    technologyInvestmentType: rawParams.technologyInvestmentType,
+    securityVulnerability: rawParams.securityVulnerability,
   });
 
   console.error("[API] Creating work item:", params);
+
+  // Specific validation for 'Feature' type
+  if (params.type === "Feature") {
+    if (!params.technologyInvestmentType) {
+      throw new Error(
+        "Field 'technologyInvestmentType' is required for work item type 'Feature'."
+      );
+    }
+    if (!params.securityVulnerability) {
+      throw new Error(
+        "Field 'securityVulnerability' is required for work item type 'Feature'."
+      );
+    }
+  }
 
   try {
     // Get the Work Item Tracking API client
     const witClient = await getWorkItemClient();
 
     // Create patch operations for the work item
-    const patchOperations = [
+    const patchOperations = [ // Removed explicit type annotation
       {
         op: "add",
         path: "/fields/System.Title",
         value: params.title,
       },
     ];
+
+    // Conditionally add optional fields
+    if (params.technologyInvestmentType) {
+      patchOperations.push({
+        op: "add",
+        path: "/fields/Technology Investment Type", // Assuming field name
+        value: params.technologyInvestmentType,
+      });
+    }
+
+    if (params.securityVulnerability) {
+      patchOperations.push({
+        op: "add",
+        path: "/fields/Security Vulnerability", // Assuming field name
+        value: params.securityVulnerability,
+      });
+    }
 
     if (params.description) {
       patchOperations.push({
@@ -255,8 +288,18 @@ export const workItemTools = [
           type: "string",
           description: "User to assign the work item to",
         },
+        technologyInvestmentType: {
+          type: "string",
+          description:
+            "The Technology Investment Type for the work item (Required for Features)", // Updated description
+        },
+        securityVulnerability: {
+          type: "string",
+          description:
+            "The Security Vulnerability status for the work item (Required for Features)", // Updated description
+        },
       },
-      required: ["project", "type", "title"],
+      required: ["project", "type", "title"], // Removed optional fields from required
     },
   },
 ];

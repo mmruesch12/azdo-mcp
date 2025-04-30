@@ -31,6 +31,8 @@ export const createWorkItemSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
   assignedTo: z.string().optional(),
+  technologyInvestmentType: z.string().optional(), // Made optional
+  securityVulnerability: z.string().optional(), // Made optional
 });
 
 export type CreateWorkItemParams = z.infer<typeof createWorkItemSchema>;
