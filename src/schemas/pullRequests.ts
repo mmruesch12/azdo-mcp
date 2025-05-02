@@ -59,3 +59,16 @@ export const getPullRequestDiffSchema = z.object({
 });
 
 export type GetPullRequestDiffParams = z.infer<typeof getPullRequestDiffSchema>;
+
+/**
+ * Schema for updating a pull request
+ */
+export const updatePullRequestSchema = z.object({
+  pullRequestId: z.number(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  status: z.enum(["active", "completed", "abandoned"]).optional(), // Note: Status update might have specific API requirements
+  // Add other updatable fields as needed, e.g., reviewers, target branch (carefully)
+});
+
+export type UpdatePullRequestParams = z.infer<typeof updatePullRequestSchema>;

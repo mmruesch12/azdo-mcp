@@ -14,6 +14,8 @@ import {
   type CreatePullRequestParams,
   type CreatePullRequestCommentParams,
   type GetPullRequestDiffParams,
+  updatePullRequestSchema,
+  type UpdatePullRequestParams,
 } from "../schemas/pullRequests.js";
 
 /**
@@ -628,6 +630,98 @@ function generateUnifiedDiff(
 
   return finalPatch;
 }
+
+/**
+ * Update an existing pull request
+ */
+export async function updatePullRequest(rawParams: any) {
+  // Parse arguments
+  const params = updatePullRequestSchema.parse({
+    pullRequestId: rawParams.pullRequestId,
+    title: rawParams.title,
+    description: rawParams.description,
+    status: rawParams.status,
+  });
+
+  console.error("[API] Updating pull request:", params);
+
+  try {
+    // Get the Git API client
+    const gitClient = await getGitClient();
+
+    // Prepare the update payload
+    const updateData: any = {};
+    if (params.title !== undefined) {
+      updateData.title = params.title;
+    }
+    if (params.description !== undefined) {
+      updateData.description = params.description;
+    }
+    if (params.status !== undefined) {
+      // Map status string to the API's expected enum/value if necessary
+      // For azure-devops-node-api, it might handle the string directly or need a specific type.
+      // Let's assume it handles the string for now, but this might need adjustment.
+      // The REST API uses numbers: 1=active, 2=abandoned, 3=completed
+      let statusId: number | undefined;
+      switch (params.status) {
+        case "active":
+          statusId = 1;
+          break;
+        case "completed":
+          statusId = 3;
+          break;
+        case "abandoned":
+          statusId = 2;
+          break;
+      }
+      if (statusId !== undefined) {
+        updateData.status = statusId;
+      }
+    }
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      console.error("[API] No fields provided to update.");
+      return {
+        content: [
+          {
+            type: "text",
+            text: "No fields provided to update.",
+          },
+        ],
+      };
+    }
+
+    // Update pull request
+    if (!DEFAULT_PROJECT || !DEFAULT_REPOSITORY) {
+      throw new Error("Default project and repository must be configured");
+    }
+
+    const updatedPullRequest = await gitClient.updatePullRequest(
+      updateData,
+      DEFAULT_REPOSITORY,
+      params.pullRequestId,
+      DEFAULT_PROJECT
+    );
+
+    console.error(
+      `[API] Updated pull request: ${updatedPullRequest.pullRequestId}`
+    );
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(updatedPullRequest, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    logError("Error updating pull request", error);
+    throw error;
+  }
+}
+
 /**
  * Tool definitions for pull requests
  */
@@ -750,6 +844,34 @@ export const pullRequestTools = [
           type: "number",
           description: "Specific iteration to get diff for (optional)",
         },
+      },
+      required: ["pullRequestId"],
+    },
+  },
+  {
+    name: "update_pull_request",
+    description: "Update an existing pull request",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pullRequestId: {
+          type: "number",
+          description: "ID of the pull request to update",
+        },
+        title: {
+          type: "string",
+          description: "New title for the pull request (optional)",
+        },
+        description: {
+          type: "string",
+          description: "New description for the pull request (optional)",
+        },
+        status: {
+          type: "string",
+          enum: ["active", "completed", "abandoned"],
+          description: "New status for the pull request (optional)",
+        },
+        // Add other updatable fields here if needed
       },
       required: ["pullRequestId"],
     },

@@ -26,6 +26,7 @@ import {
   createPullRequest,
   createPullRequestComment,
   getPullRequestDiff,
+  updatePullRequest, // Added import
   pullRequestTools,
 } from "./tools/pullRequests.js";
 
@@ -83,6 +84,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await createPullRequestComment(request.params.arguments || {});
       case "get_pull_request_diff":
         return await getPullRequestDiff(request.params.arguments || {});
+      case "update_pull_request": // Added case
+        return await updatePullRequest(request.params.arguments || {});
 
       // Wiki
       case "create_wiki_page":
