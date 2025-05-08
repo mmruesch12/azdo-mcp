@@ -99,11 +99,44 @@ export async function getPullRequest(rawParams: any) {
 
     console.error(`[API] Found pull request: ${pullRequest.pullRequestId}`);
 
+    // Fetch linked work items if the link exists
+    let linkedWorkItems: { id: number; url: string }[] = []; // Initialize with specific type
+    if (pullRequest._links?.workItems?.href) {
+      try {
+        console.error(`[API] Fetching linked work items from: ${pullRequest._links.workItems.href}`);
+        const workItemsResponse = await makeAzureDevOpsRequest(pullRequest._links.workItems.href);
+        if (workItemsResponse && workItemsResponse.value) {
+          linkedWorkItems = workItemsResponse.value.map((item: { id: string; url: string }) => ({
+            id: parseInt(item.id, 10), // Convert ID back to number
+            url: item.url,
+          }));
+          console.error(`[API] Found ${linkedWorkItems.length} linked work items.`);
+        } else {
+          console.error("[API] No linked work items found or unexpected response format from workItems link.");
+          // Log the actual response for debugging
+          console.error("[API] Work items response received:", JSON.stringify(workItemsResponse, null, 2));
+        }
+      } catch (wiError) {
+        logError("Error fetching linked work items from workItems link", wiError);
+        // Explicitly set to empty array on error, but log it
+        linkedWorkItems = [];
+      }
+    } else {
+      console.error("[API] No _links.workItems.href found in pull request response.");
+    }
+
+    // Add linked work items to the response object
+    const responsePayload = {
+      ...pullRequest,
+      linkedWorkItems: linkedWorkItems, // Add the fetched work items
+    };
+
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(pullRequest, null, 2),
+          text: JSON.stringify(responsePayload, null, 2), // Use the modified payload
         },
       ],
     };
@@ -124,9 +157,10 @@ export async function createPullRequest(rawParams: any) {
     sourceBranch: rawParams.sourceBranch,
     targetBranch: rawParams.targetBranch,
     reviewers: rawParams.reviewers,
+    workItemIds: rawParams.workItemIds,
   });
 
-  console.error("[API] Creating pull request:", params);
+  console.error("[API] Creating pull request:", JSON.stringify(params, null, 2));
 
   try {
     // Get the Git API client
@@ -153,7 +187,14 @@ export async function createPullRequest(rawParams: any) {
         title: params.title,
         description: params.description,
         reviewers: params.reviewers
-          ? params.reviewers.map((email) => ({ id: email }))
+          ? params.reviewers.map((email) => ({ id: email })) // Assuming email maps to user ID/descriptor
+          : undefined,
+        // Link work items if provided
+        workItemRefs: params.workItemIds
+          ? params.workItemIds.map((id) => ({
+              id: id.toString(),
+              url: `${ORG_URL}/_apis/wit/workItems/${id}`, // Construct work item URL
+            }))
           : undefined,
       },
       DEFAULT_REPOSITORY,
@@ -641,9 +682,10 @@ export async function updatePullRequest(rawParams: any) {
     title: rawParams.title,
     description: rawParams.description,
     status: rawParams.status,
+    workItemIds: rawParams.workItemIds,
   });
 
-  console.error("[API] Updating pull request:", params);
+  console.error("[API] Updating pull request:", JSON.stringify(params, null, 2));
 
   try {
     // Get the Git API client
@@ -678,6 +720,15 @@ export async function updatePullRequest(rawParams: any) {
         updateData.status = statusId;
       }
     }
+    // Add work item references if provided
+    // Note: This typically *replaces* existing links, doesn't append.
+    if (params.workItemIds !== undefined) {
+        updateData.workItemRefs = params.workItemIds.map((id) => ({
+            id: id.toString(),
+            url: `${ORG_URL}/_apis/wit/workItems/${id}`, // Construct work item URL
+        }));
+    }
+
 
     // Check if there's anything to update
     if (Object.keys(updateData).length === 0) {
@@ -697,15 +748,19 @@ export async function updatePullRequest(rawParams: any) {
       throw new Error("Default project and repository must be configured");
     }
 
-    const updatedPullRequest = await gitClient.updatePullRequest(
-      updateData,
-      DEFAULT_REPOSITORY,
-      params.pullRequestId,
-      DEFAULT_PROJECT
+    // Use makeAzureDevOpsRequest directly with PATCH
+    const updateUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullrequests/${params.pullRequestId}?api-version=7.1-preview.1`;
+
+    console.error(`[API] Calling PATCH ${updateUrl} with data:`, JSON.stringify(updateData, null, 2));
+
+    const updatedPullRequest = await makeAzureDevOpsRequest(
+      updateUrl,
+      "PATCH",
+      updateData
     );
 
     console.error(
-      `[API] Updated pull request: ${updatedPullRequest.pullRequestId}`
+      `[API] Updated pull request via REST: ${updatedPullRequest.pullRequestId}`
     );
 
     return {
@@ -781,6 +836,11 @@ export const pullRequestTools = [
           type: "array",
           items: { type: "string" },
           description: "Array of reviewer email addresses",
+        },
+        workItemIds: {
+          type: "array",
+          items: { type: "number" },
+          description: "Array of work item IDs to link",
         },
       },
       required: [
@@ -870,6 +930,11 @@ export const pullRequestTools = [
           type: "string",
           enum: ["active", "completed", "abandoned"],
           description: "New status for the pull request (optional)",
+        },
+        workItemIds: {
+          type: "array",
+          items: { type: "number" },
+          description: "Array of work item IDs to link (replaces existing links)",
         },
         // Add other updatable fields here if needed
       },

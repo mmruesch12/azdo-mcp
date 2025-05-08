@@ -27,6 +27,7 @@ export const createPullRequestSchema = z.object({
   sourceBranch: z.string(),
   targetBranch: z.string(),
   reviewers: z.array(z.string()).optional(),
+  workItemIds: z.array(z.number()).optional().describe('Array of work item IDs to link'),
 });
 
 export type CreatePullRequestParams = z.infer<typeof createPullRequestSchema>;
@@ -68,6 +69,7 @@ export const updatePullRequestSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   status: z.enum(["active", "completed", "abandoned"]).optional(), // Note: Status update might have specific API requirements
+  workItemIds: z.array(z.number()).optional().describe('Array of work item IDs to link (replaces existing links)'),
   // Add other updatable fields as needed, e.g., reviewers, target branch (carefully)
 });
 
