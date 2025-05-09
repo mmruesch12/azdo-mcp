@@ -103,26 +103,44 @@ export async function getPullRequest(rawParams: any) {
     let linkedWorkItems: { id: number; url: string }[] = []; // Initialize with specific type
     if (pullRequest._links?.workItems?.href) {
       try {
-        console.error(`[API] Fetching linked work items from: ${pullRequest._links.workItems.href}`);
-        const workItemsResponse = await makeAzureDevOpsRequest(pullRequest._links.workItems.href);
+        console.error(
+          `[API] Fetching linked work items from: ${pullRequest._links.workItems.href}`
+        );
+        const workItemsResponse = await makeAzureDevOpsRequest(
+          pullRequest._links.workItems.href
+        );
         if (workItemsResponse && workItemsResponse.value) {
-          linkedWorkItems = workItemsResponse.value.map((item: { id: string; url: string }) => ({
-            id: parseInt(item.id, 10), // Convert ID back to number
-            url: item.url,
-          }));
-          console.error(`[API] Found ${linkedWorkItems.length} linked work items.`);
+          linkedWorkItems = workItemsResponse.value.map(
+            (item: { id: string; url: string }) => ({
+              id: parseInt(item.id, 10), // Convert ID back to number
+              url: item.url,
+            })
+          );
+          console.error(
+            `[API] Found ${linkedWorkItems.length} linked work items.`
+          );
         } else {
-          console.error("[API] No linked work items found or unexpected response format from workItems link.");
+          console.error(
+            "[API] No linked work items found or unexpected response format from workItems link."
+          );
           // Log the actual response for debugging
-          console.error("[API] Work items response received:", JSON.stringify(workItemsResponse, null, 2));
+          console.error(
+            "[API] Work items response received:",
+            JSON.stringify(workItemsResponse, null, 2)
+          );
         }
       } catch (wiError) {
-        logError("Error fetching linked work items from workItems link", wiError);
+        logError(
+          "Error fetching linked work items from workItems link",
+          wiError
+        );
         // Explicitly set to empty array on error, but log it
         linkedWorkItems = [];
       }
     } else {
-      console.error("[API] No _links.workItems.href found in pull request response.");
+      console.error(
+        "[API] No _links.workItems.href found in pull request response."
+      );
     }
 
     // Add linked work items to the response object
@@ -130,7 +148,6 @@ export async function getPullRequest(rawParams: any) {
       ...pullRequest,
       linkedWorkItems: linkedWorkItems, // Add the fetched work items
     };
-
 
     return {
       content: [
@@ -158,9 +175,13 @@ export async function createPullRequest(rawParams: any) {
     targetBranch: rawParams.targetBranch,
     reviewers: rawParams.reviewers,
     workItemIds: rawParams.workItemIds,
+    isDraft: rawParams.isDraft,
   });
 
-  console.error("[API] Creating pull request:", JSON.stringify(params, null, 2));
+  console.error(
+    "[API] Creating pull request:",
+    JSON.stringify(params, null, 2)
+  );
 
   try {
     // Get the Git API client
@@ -187,11 +208,11 @@ export async function createPullRequest(rawParams: any) {
         title: params.title,
         description: params.description,
         reviewers: params.reviewers
-          ? params.reviewers.map((email) => ({ id: email })) // Assuming email maps to user ID/descriptor
+          ? params.reviewers.map((email: string) => ({ id: email })) // Assuming email maps to user ID/descriptor
           : undefined,
         // Link work items if provided
         workItemRefs: params.workItemIds
-          ? params.workItemIds.map((id) => ({
+          ? params.workItemIds.map((id: number) => ({
               id: id.toString(),
               url: `${ORG_URL}/_apis/wit/workItems/${id}`, // Construct work item URL
             }))
@@ -278,13 +299,16 @@ export async function createPullRequestComment(rawParams: any) {
         // Get iterations in ascending order
         const iterationsUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations?api-version=7.1-preview.1`;
         const iterationsResponse = await makeAzureDevOpsRequest(iterationsUrl);
-        
-        if (!iterationsResponse.value || iterationsResponse.value.length === 0) {
+
+        if (
+          !iterationsResponse.value ||
+          iterationsResponse.value.length === 0
+        ) {
           throw new Error("No iterations found for pull request");
         }
 
         // Normalize file path
-        const normalizedPath = params.filePath.replace(/^\/+/, '');
+        const normalizedPath = params.filePath.replace(/^\/+/, "");
         console.error(`[API] Looking for file: ${normalizedPath}`);
 
         // Find the iteration where the file existed
@@ -296,32 +320,49 @@ export async function createPullRequestComment(rawParams: any) {
           const changesUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/iterations/${iteration.id}/changes?api-version=7.1-preview.1`;
           const changes = await makeAzureDevOpsRequest(changesUrl);
 
-          console.error(`[API] Iteration ${iteration.id} changes:`, JSON.stringify(changes.changeEntries?.map((c: any) => c.item?.path), null, 2));
+          console.error(
+            `[API] Iteration ${iteration.id} changes:`,
+            JSON.stringify(
+              changes.changeEntries?.map((c: any) => c.item?.path),
+              null,
+              2
+            )
+          );
 
           // Try different path formats
           const pathVariations = [
             normalizedPath,
-            normalizedPath.replace(/^\/+/, ''),
+            normalizedPath.replace(/^\/+/, ""),
             `/${normalizedPath}`,
             normalizedPath.toLowerCase(),
-            normalizedPath.replace(/^\/+/, '').toLowerCase()
+            normalizedPath.replace(/^\/+/, "").toLowerCase(),
           ];
 
           console.error(`[API] Trying path variations:`, pathVariations);
 
-          const fileChange = changes.changeEntries?.find((change: { item?: { path?: string } }) => {
-            const changePath = change.item?.path || '';
-            const match = pathVariations.some(p => changePath.toLowerCase() === p.toLowerCase());
-            if (match) {
-              console.error(`[API] Found match: ${changePath} matches ${pathVariations.find(p => changePath.toLowerCase() === p.toLowerCase())}`);
+          const fileChange = changes.changeEntries?.find(
+            (change: { item?: { path?: string } }) => {
+              const changePath = change.item?.path || "";
+              const match = pathVariations.some(
+                (p) => changePath.toLowerCase() === p.toLowerCase()
+              );
+              if (match) {
+                console.error(
+                  `[API] Found match: ${changePath} matches ${pathVariations.find(
+                    (p) => changePath.toLowerCase() === p.toLowerCase()
+                  )}`
+                );
+              }
+              return match;
             }
-            return match;
-          });
+          );
 
           if (fileChange) {
             targetIteration = iteration;
             targetFileChange = fileChange;
-            console.error(`[API] Found file in iteration ${iteration.id} with path ${fileChange.item.path}`);
+            console.error(
+              `[API] Found file in iteration ${iteration.id} with path ${fileChange.item.path}`
+            );
             break;
           }
         }
@@ -335,55 +376,66 @@ export async function createPullRequestComment(rawParams: any) {
           filePath: normalizedPath,
           rightFileStart: {
             line: params.lineNumber,
-            offset: 1
+            offset: 1,
           },
           rightFileEnd: {
             line: params.lineNumber,
-            offset: 1
-          }
+            offset: 1,
+          },
         };
 
         // Set up the thread with version information
         const targetIterationId = Number(targetIteration.id);
-        console.error(`[API] Using iteration ${targetIterationId} with change ID ${targetFileChange.changeTrackingId}`);
+        console.error(
+          `[API] Using iteration ${targetIterationId} with change ID ${targetFileChange.changeTrackingId}`
+        );
 
         // Set thread properties for version control
         thread.properties = {
           "Microsoft.TeamFoundation.Discussion.SourceCommitId": {
             $type: "System.String",
-            $value: targetFileChange.item.commitId
+            $value: targetFileChange.item.commitId,
           },
           "Microsoft.TeamFoundation.Discussion.TargetCommitId": {
             $type: "System.String",
-            $value: targetFileChange.item.commitId
+            $value: targetFileChange.item.commitId,
           },
           "Microsoft.TeamFoundation.Discussion.Iteration": {
             $type: "System.String",
-            $value: targetIterationId.toString()
-          }
+            $value: targetIterationId.toString(),
+          },
         };
 
         // Set iteration context
         thread.pullRequestThreadContext = {
           iterationContext: {
             firstComparingIteration: targetIterationId,
-            secondComparingIteration: targetIterationId
+            secondComparingIteration: targetIterationId,
           },
-          changeTrackingId: targetFileChange.changeTrackingId
+          changeTrackingId: targetFileChange.changeTrackingId,
         };
 
-        thread.comments = [{
-          parentCommentId: 0,
-          content: params.content,
-          commentType: 1
-        }];
+        thread.comments = [
+          {
+            parentCommentId: 0,
+            content: params.content,
+            commentType: 1,
+          },
+        ];
 
         thread.status = "active";
 
-        console.error('[API] Thread context:', JSON.stringify({
-          iteration: targetIteration.id,
-          changeTracking: targetFileChange.changeTrackingId
-        }, null, 2));
+        console.error(
+          "[API] Thread context:",
+          JSON.stringify(
+            {
+              iteration: targetIteration.id,
+              changeTracking: targetFileChange.changeTrackingId,
+            },
+            null,
+            2
+          )
+        );
       } else {
         console.error("[API] Creating general PR comment");
       }
@@ -518,8 +570,10 @@ export async function getPullRequestDiff(rawParams: any) {
           );
 
           // Handle cases where content retrieval might fail
-          const oldContentStr = oldContent || "<Unable to retrieve old content>";
-          const newContentStr = newContent || "<Unable to retrieve new content>";
+          const oldContentStr =
+            oldContent || "<Unable to retrieve old content>";
+          const newContentStr =
+            newContent || "<Unable to retrieve new content>";
 
           patch = generateUnifiedDiff(
             oldPath,
@@ -552,10 +606,7 @@ export async function getPullRequestDiff(rawParams: any) {
   }
 }
 // Helper function to get file content
-async function getFileContent(
-  path: string,
-  version: string
-): Promise<string> {
+async function getFileContent(path: string, version: string): Promise<string> {
   if (!DEFAULT_PROJECT || !DEFAULT_REPOSITORY) {
     throw new Error("Default project and repository must be configured");
   }
@@ -566,27 +617,44 @@ async function getFileContent(
       version
     )}&api-version=7.1-preview.1`;
     const headers = { Accept: "application/octet-stream" };
-    const response = await makeAzureDevOpsRequest(itemUrl, "GET", undefined, headers);
+    const response = await makeAzureDevOpsRequest(
+      itemUrl,
+      "GET",
+      undefined,
+      headers
+    );
     // Add detailed logging to inspect the response
     console.error(
       `[API] Response received in getFileContent for ${path} (version: ${version}):`,
       `Type: ${typeof response}`,
-      `Value Preview: ${response ? JSON.stringify(response).substring(0, 200) + "..." : "null or undefined"}`
+      `Value Preview: ${
+        response
+          ? JSON.stringify(response).substring(0, 200) + "..."
+          : "null or undefined"
+      }`
     );
 
     if (response && typeof response === "object" && response.content) {
-      console.error(`[API] getFileContent returning object content for ${path}`);
+      console.error(
+        `[API] getFileContent returning object content for ${path}`
+      );
       return response.content;
     } else if (typeof response === "string") {
-       // Check if the string indicates an error we missed
-       if (response.startsWith('<') && response.endsWith('>')) {
-         console.error(`[API] getFileContent received potential error string: ${response}`);
-         return ""; // Treat placeholder errors as empty
-       }
-      console.error(`[API] getFileContent returning string content for ${path}`);
+      // Check if the string indicates an error we missed
+      if (response.startsWith("<") && response.endsWith(">")) {
+        console.error(
+          `[API] getFileContent received potential error string: ${response}`
+        );
+        return ""; // Treat placeholder errors as empty
+      }
+      console.error(
+        `[API] getFileContent returning string content for ${path}`
+      );
       return response;
     }
-    console.error(`[API] getFileContent returning empty string for ${path} because response was not handled.`);
+    console.error(
+      `[API] getFileContent returning empty string for ${path} because response was not handled.`
+    );
     return "";
   } catch (error) {
     console.error(`[API] Error fetching file content for ${path}:`, error);
@@ -657,17 +725,18 @@ function generateUnifiedDiff(
       startIndex = i;
       break;
     }
-     // Handle cases where createPatch might return minimal output for no changes
-     if (i === patchLines.length - 1) {
-        return ""; // No actual diff content found
-     }
+    // Handle cases where createPatch might return minimal output for no changes
+    if (i === patchLines.length - 1) {
+      return ""; // No actual diff content found
+    }
   }
-
 
   const corePatch = patchLines.slice(startIndex).join("\n");
 
   // Ensure the patch ends with a newline if it contains content
-  const finalPatch = corePatch.trim() ? gitDiffHeader + corePatch + (corePatch.endsWith('\n') ? '' : '\n') : "";
+  const finalPatch = corePatch.trim()
+    ? gitDiffHeader + corePatch + (corePatch.endsWith("\n") ? "" : "\n")
+    : "";
 
   return finalPatch;
 }
@@ -683,9 +752,13 @@ export async function updatePullRequest(rawParams: any) {
     description: rawParams.description,
     status: rawParams.status,
     workItemIds: rawParams.workItemIds,
+    isDraft: rawParams.isDraft,
   });
 
-  console.error("[API] Updating pull request:", JSON.stringify(params, null, 2));
+  console.error(
+    "[API] Updating pull request:",
+    JSON.stringify(params, null, 2)
+  );
 
   try {
     // Get the Git API client
@@ -723,12 +796,11 @@ export async function updatePullRequest(rawParams: any) {
     // Add work item references if provided
     // Note: This typically *replaces* existing links, doesn't append.
     if (params.workItemIds !== undefined) {
-        updateData.workItemRefs = params.workItemIds.map((id) => ({
-            id: id.toString(),
-            url: `${ORG_URL}/_apis/wit/workItems/${id}`, // Construct work item URL
-        }));
+      updateData.workItemRefs = params.workItemIds.map((id: number) => ({
+        id: id.toString(),
+        url: `${ORG_URL}/_apis/wit/workItems/${id}`, // Construct work item URL
+      }));
     }
-
 
     // Check if there's anything to update
     if (Object.keys(updateData).length === 0) {
@@ -751,7 +823,10 @@ export async function updatePullRequest(rawParams: any) {
     // Use makeAzureDevOpsRequest directly with PATCH
     const updateUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullrequests/${params.pullRequestId}?api-version=7.1-preview.1`;
 
-    console.error(`[API] Calling PATCH ${updateUrl} with data:`, JSON.stringify(updateData, null, 2));
+    console.error(
+      `[API] Calling PATCH ${updateUrl} with data:`,
+      JSON.stringify(updateData, null, 2)
+    );
 
     const updatedPullRequest = await makeAzureDevOpsRequest(
       updateUrl,
@@ -843,12 +918,7 @@ export const pullRequestTools = [
           description: "Array of work item IDs to link",
         },
       },
-      required: [
-        "title",
-        "description",
-        "sourceBranch",
-        "targetBranch",
-      ],
+      required: ["title", "description", "sourceBranch", "targetBranch"],
     },
   },
   {
@@ -934,7 +1004,8 @@ export const pullRequestTools = [
         workItemIds: {
           type: "array",
           items: { type: "number" },
-          description: "Array of work item IDs to link (replaces existing links)",
+          description:
+            "Array of work item IDs to link (replaces existing links)",
         },
         // Add other updatable fields here if needed
       },
