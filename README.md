@@ -2,6 +2,10 @@
 
 An MCP (Model Context Protocol) server that provides integration with Azure DevOps, allowing AI assistants to interact with Azure DevOps work items, pull requests, and wikis.
 
+<a href="https://glama.ai/mcp/servers/@mmruesch12/azdo-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@mmruesch12/azdo-mcp/badge" alt="azure-devops Server MCP server" />
+</a>
+
 ## Features
 
 - Work Items Management (create, list, get)
