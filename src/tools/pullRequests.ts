@@ -16,6 +16,8 @@ import {
   type GetPullRequestDiffParams,
   updatePullRequestSchema,
   type UpdatePullRequestParams,
+  getPullRequestCommentsSchema,
+  type GetPullRequestCommentsParams,
 } from "../schemas/pullRequests.js";
 
 /**
@@ -72,6 +74,59 @@ export async function listPullRequests(rawParams: any) {
     };
   } catch (error) {
     logError("Error listing pull requests", error);
+    throw error;
+  }
+}
+
+/**
+ * Get comments for a pull request (all threads or a specific thread)
+ */
+export async function getPullRequestComments(rawParams: any) {
+  // Parse arguments
+  const params = getPullRequestCommentsSchema.parse(rawParams);
+
+  console.error("[API] Getting pull request comments:", params);
+
+  try {
+    // Check for default project and repository configuration
+    if (!DEFAULT_PROJECT || !DEFAULT_REPOSITORY) {
+      throw new Error("Default project and repository must be configured");
+    }
+
+    // Construct the API URL
+    const apiVersion = "api-version=7.0";
+    let apiUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/pullRequests/${params.pullRequestId}/threads`;
+
+    if (params.threadId) {
+      apiUrl += `/${params.threadId}/comments?${apiVersion}`;
+    } else {
+      apiUrl += `?${apiVersion}`;
+    }
+
+    console.error(`[API] Fetching comments from: ${apiUrl}`);
+
+    // Make the API request
+    const response = await makeAzureDevOpsRequest(apiUrl, "GET");
+
+    // Log the number of comments/threads found
+    // If threadId is specified, response.comments will be an array of comments
+    // Otherwise, response.value will be an array of threads, and each thread has comments
+    const count = params.threadId
+      ? response.comments?.length || 0
+      : response.value?.length || 0;
+    const itemType = params.threadId ? "comments" : "threads";
+    console.error(`[API] Found ${count} ${itemType}`);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(response, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    logError("Error getting pull request comments", error);
     throw error;
   }
 }
@@ -880,6 +935,26 @@ export const pullRequestTools = [
         pullRequestId: {
           type: "number",
           description: "ID of the pull request",
+        },
+      },
+      required: ["pullRequestId"],
+    },
+  },
+  {
+    name: "get_pull_request_comments",
+    description:
+      "Get comments for a pull request (all threads or a specific thread's comments)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pullRequestId: {
+          type: "number",
+          description: "ID of the pull request",
+        },
+        threadId: {
+          type: "number",
+          description:
+            "ID of a specific thread to fetch comments from (optional)",
         },
       },
       required: ["pullRequestId"],

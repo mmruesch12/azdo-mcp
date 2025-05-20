@@ -82,3 +82,15 @@ export const updatePullRequestSchema = z.object({
 });
 
 export type UpdatePullRequestParams = z.infer<typeof updatePullRequestSchema>;
+
+/**
+ * Schema for getting pull request comments
+ */
+export const getPullRequestCommentsSchema = z.object({
+  pullRequestId: z.number(),
+  threadId: z.number().optional(),
+});
+
+export type GetPullRequestCommentsParams = z.infer<
+  typeof getPullRequestCommentsSchema
+>;
