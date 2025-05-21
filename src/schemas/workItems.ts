@@ -36,3 +36,21 @@ export const createWorkItemSchema = z.object({
 });
 
 export type CreateWorkItemParams = z.infer<typeof createWorkItemSchema>;
+
+/**
+ * Schema for updating a work item
+ */
+export const updateWorkItemSchema = z.object({
+  project: z.string().optional(), // Optional, will use default if not provided
+  id: z.number(),
+  document: z.array(
+    z.object({
+      op: z.enum(["add", "remove", "replace", "move", "copy", "test"]),
+      path: z.string(),
+      from: z.string().optional(), // For 'move' and 'copy' operations
+      value: z.any().optional(),
+    })
+  ),
+});
+
+export type UpdateWorkItemParams = z.infer<typeof updateWorkItemSchema>;
