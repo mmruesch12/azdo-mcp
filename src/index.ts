@@ -76,9 +76,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Projects
       ...projectTools,
       // Boards
-      ...boardTools, // Added boardTools
+      ...boardTools,
       // Pipelines
-      ...pipelineTools, // Added pipelineTools
+      ...pipelineTools,
     ],
   };
 });

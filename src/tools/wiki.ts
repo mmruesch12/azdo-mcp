@@ -339,42 +339,106 @@ export const wikiTools = [
     name: "create_wiki_page",
     description:
       "Creates or updates a wiki page. For existing pages, it's safer to use edit_wiki_page with an ETag.",
-    inputSchema: createWikiPageSchema, // Corrected: No .zod
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+        wiki: { type: "string", description: "Identifier of the wiki (name or ID)" },
+        path: { type: "string", description: "Path of the wiki page" },
+        content: { type: "string", description: "Content of the wiki page" },
+      },
+      required: ["wiki", "path", "content"],
+    },
   },
   {
     name: "edit_wiki_page",
     description:
       "Edit an existing wiki page. ETag is recommended; if not provided, an attempt will be made to fetch it.",
-    inputSchema: editWikiPageSchema, // Corrected: No .zod
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+        wiki: { type: "string", description: "Identifier of the wiki (name or ID)" },
+        path: { type: "string", description: "Path of the wiki page" },
+        content: { type: "string", description: "New content for the wiki page" },
+        etag: { type: "string", description: "ETag for concurrency control (optional)" },
+      },
+      required: ["wiki", "path", "content"],
+    },
   },
   {
     name: "get_wikis",
     description: "List all wikis in a project.",
-    inputSchema: getWikisSchema, // Corrected: No .zod
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+      },
+      required: [],
+    },
   },
   {
     name: "get_wiki_page",
     description:
       "Get a specific wiki page by its path. Can optionally include sub-pages through recursion.",
-    inputSchema: getWikiPageSchema,
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+        wikiIdentifier: { type: "string", description: "Identifier of the wiki (name or ID)" },
+        path: { type: "string", description: "Path of the wiki page" },
+        recursionLevel: { type: "number", description: "Recursion level for sub-pages (0 for None, 1 for Full) (optional)" },
+        includeContent: { type: "boolean", description: "Whether to include page content (defaults to true) (optional)" },
+      },
+      required: ["wikiIdentifier", "path"],
+    },
   },
-  // Definitions for create_wiki, list_wiki_pages, get_wiki_page_by_id will be added here
   {
     name: "create_wiki",
     description:
       "Create a new wiki. Can be a project wiki or a code wiki linked to a Git repository.",
-    inputSchema: createWikiSchema,
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+        name: { type: "string", description: "Name for the new wiki" },
+        type: { type: "string", enum: ["projectWiki", "codeWiki"], description: "Type of wiki (projectWiki or codeWiki, defaults to projectWiki) (optional)" },
+        mappedPath: { type: "string", description: "Base path for code wiki (e.g., \"/\") (required for codeWiki)" },
+        repositoryId: { type: "string", description: "ID of the Git repository for codeWiki (required for codeWiki)" },
+        version: { type: "string", description: "Branch name for code wiki (e.g., \"main\") (required for codeWiki)" },
+      },
+      required: ["name"],
+    },
   },
   {
     name: "list_wiki_pages",
     description:
       "List pages in a specific wiki. Can filter by path and include sub-pages.",
-    inputSchema: listWikiPagesSchema,
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+        wikiIdentifier: { type: "string", description: "Identifier of the wiki (name or ID)" },
+        path: { type: "string", description: "Path to list pages from (optional)" },
+        recursionLevel: { type: "number", description: "Recursion level for sub-pages (0 for None, 1 for Full) (optional)" },
+        includeContent: { type: "boolean", description: "Whether to include page content (defaults to false) (optional)" },
+      },
+      required: ["wikiIdentifier"],
+    },
   },
   {
     name: "get_wiki_page_by_id",
     description:
       "Get a specific wiki page by its integer ID. Can optionally include sub-pages.",
-    inputSchema: getWikiPageByIdSchema,
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Name of the Azure DevOps project (optional, uses default if not provided)" },
+        wikiIdentifier: { type: "string", description: "Identifier of the wiki (name or ID)" },
+        pageId: { type: "number", description: "Integer ID of the wiki page" },
+        includeContent: { type: "boolean", description: "Whether to include page content (defaults to true) (optional)" },
+      },
+      required: ["wikiIdentifier", "pageId"],
+    },
   },
 ];

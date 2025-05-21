@@ -392,7 +392,7 @@ export const workItemTools = [
                 description: "For 'move' and 'copy' operations (optional)",
               },
               value: {
-                type: "any", 
+                type: "string",
                 description: "The value for the operation (optional)",
               },
             },
