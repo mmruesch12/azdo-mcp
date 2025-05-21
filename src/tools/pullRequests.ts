@@ -57,7 +57,7 @@ export async function listPullRequests(rawParams: any) {
     const pullRequests = await gitClient.getPullRequests(
       DEFAULT_REPOSITORY,
       { status: statusId },
-      DEFAULT_PROJECT
+      DEFAULT_PROJECT,
     );
 
     console.error(`[API] Found ${pullRequests.length} pull requests`);
@@ -94,7 +94,7 @@ export async function getPullRequest(rawParams: any) {
     // Get pull request details
     const pullRequest = await gitClient.getPullRequestById(
       params.pullRequestId,
-      DEFAULT_PROJECT
+      DEFAULT_PROJECT,
     );
 
     console.error(`[API] Found pull request: ${pullRequest.pullRequestId}`);
@@ -104,42 +104,42 @@ export async function getPullRequest(rawParams: any) {
     if (pullRequest._links?.workItems?.href) {
       try {
         console.error(
-          `[API] Fetching linked work items from: ${pullRequest._links.workItems.href}`
+          `[API] Fetching linked work items from: ${pullRequest._links.workItems.href}`,
         );
         const workItemsResponse = await makeAzureDevOpsRequest(
-          pullRequest._links.workItems.href
+          pullRequest._links.workItems.href,
         );
         if (workItemsResponse && workItemsResponse.value) {
           linkedWorkItems = workItemsResponse.value.map(
             (item: { id: string; url: string }) => ({
               id: parseInt(item.id, 10), // Convert ID back to number
               url: item.url,
-            })
+            }),
           );
           console.error(
-            `[API] Found ${linkedWorkItems.length} linked work items.`
+            `[API] Found ${linkedWorkItems.length} linked work items.`,
           );
         } else {
           console.error(
-            "[API] No linked work items found or unexpected response format from workItems link."
+            "[API] No linked work items found or unexpected response format from workItems link.",
           );
           // Log the actual response for debugging
           console.error(
             "[API] Work items response received:",
-            JSON.stringify(workItemsResponse, null, 2)
+            JSON.stringify(workItemsResponse, null, 2),
           );
         }
       } catch (wiError) {
         logError(
           "Error fetching linked work items from workItems link",
-          wiError
+          wiError,
         );
         // Explicitly set to empty array on error, but log it
         linkedWorkItems = [];
       }
     } else {
       console.error(
-        "[API] No _links.workItems.href found in pull request response."
+        "[API] No _links.workItems.href found in pull request response.",
       );
     }
 
@@ -180,7 +180,7 @@ export async function createPullRequest(rawParams: any) {
 
   console.error(
     "[API] Creating pull request:",
-    JSON.stringify(params, null, 2)
+    JSON.stringify(params, null, 2),
   );
 
   try {
@@ -219,7 +219,7 @@ export async function createPullRequest(rawParams: any) {
           : undefined,
       },
       DEFAULT_REPOSITORY,
-      DEFAULT_PROJECT
+      DEFAULT_PROJECT,
     );
 
     console.error(`[API] Created pull request: ${pullRequest.pullRequestId}`);
@@ -293,7 +293,7 @@ export async function createPullRequestComment(rawParams: any) {
       // Handle file and line-specific comments
       if (params.filePath) {
         console.error(
-          `[API] Creating code comment on file: ${params.filePath}`
+          `[API] Creating code comment on file: ${params.filePath}`,
         );
 
         // Get iterations in ascending order
@@ -325,8 +325,8 @@ export async function createPullRequestComment(rawParams: any) {
             JSON.stringify(
               changes.changeEntries?.map((c: any) => c.item?.path),
               null,
-              2
-            )
+              2,
+            ),
           );
 
           // Try different path formats
@@ -344,24 +344,24 @@ export async function createPullRequestComment(rawParams: any) {
             (change: { item?: { path?: string } }) => {
               const changePath = change.item?.path || "";
               const match = pathVariations.some(
-                (p) => changePath.toLowerCase() === p.toLowerCase()
+                (p) => changePath.toLowerCase() === p.toLowerCase(),
               );
               if (match) {
                 console.error(
                   `[API] Found match: ${changePath} matches ${pathVariations.find(
-                    (p) => changePath.toLowerCase() === p.toLowerCase()
-                  )}`
+                    (p) => changePath.toLowerCase() === p.toLowerCase(),
+                  )}`,
                 );
               }
               return match;
-            }
+            },
           );
 
           if (fileChange) {
             targetIteration = iteration;
             targetFileChange = fileChange;
             console.error(
-              `[API] Found file in iteration ${iteration.id} with path ${fileChange.item.path}`
+              `[API] Found file in iteration ${iteration.id} with path ${fileChange.item.path}`,
             );
             break;
           }
@@ -387,7 +387,7 @@ export async function createPullRequestComment(rawParams: any) {
         // Set up the thread with version information
         const targetIterationId = Number(targetIteration.id);
         console.error(
-          `[API] Using iteration ${targetIterationId} with change ID ${targetFileChange.changeTrackingId}`
+          `[API] Using iteration ${targetIterationId} with change ID ${targetFileChange.changeTrackingId}`,
         );
 
         // Set thread properties for version control
@@ -433,8 +433,8 @@ export async function createPullRequestComment(rawParams: any) {
               changeTracking: targetFileChange.changeTrackingId,
             },
             null,
-            2
-          )
+            2,
+          ),
         );
       } else {
         console.error("[API] Creating general PR comment");
@@ -478,18 +478,18 @@ export async function getPullRequestDiff(rawParams: any) {
     // Get pull request details first to get source and target commits
     const pullRequest = await gitClient.getPullRequestById(
       params.pullRequestId,
-      DEFAULT_PROJECT
+      DEFAULT_PROJECT,
     );
 
     // Check for missing sourceRefName or targetRefName
     if (!pullRequest.sourceRefName) {
       throw new Error(
-        "Source branch reference is missing in pull request data"
+        "Source branch reference is missing in pull request data",
       );
     }
     if (!pullRequest.targetRefName) {
       throw new Error(
-        "Target branch reference is missing in pull request data"
+        "Target branch reference is missing in pull request data",
       );
     }
 
@@ -498,12 +498,12 @@ export async function getPullRequestDiff(rawParams: any) {
 
     if (!sourceBranch) {
       throw new Error(
-        "Invalid source branch name extracted from sourceRefName"
+        "Invalid source branch name extracted from sourceRefName",
       );
     }
     if (!targetBranch) {
       throw new Error(
-        "Invalid target branch name extracted from targetRefName"
+        "Invalid target branch name extracted from targetRefName",
       );
     }
 
@@ -535,7 +535,7 @@ export async function getPullRequestDiff(rawParams: any) {
         if (change.changeType === "add") {
           const newContent = await getFileContent(
             change.item.path,
-            sourceBranch
+            sourceBranch,
           );
           patch = generateUnifiedDiff(
             oldPath, // Represents /dev/null effectively
@@ -543,12 +543,12 @@ export async function getPullRequestDiff(rawParams: any) {
             "", // Old content is empty for add
             newContent || "<Unable to retrieve file content>",
             change.item.objectId || "unknown",
-            true // Indicate it's a new file
+            true, // Indicate it's a new file
           );
         } else if (change.changeType === "delete") {
           const oldContent = await getFileContent(
             change.item.path,
-            targetBranch
+            targetBranch,
           );
           patch = generateUnifiedDiff(
             oldPath,
@@ -557,16 +557,16 @@ export async function getPullRequestDiff(rawParams: any) {
             "", // New content is empty for delete
             change.item.objectId || "unknown",
             false,
-            true // Indicate it's a deleted file
+            true, // Indicate it's a deleted file
           );
         } else if (change.changeType === "edit") {
           const oldContent = await getFileContent(
             change.item.path,
-            targetBranch
+            targetBranch,
           );
           const newContent = await getFileContent(
             change.item.path,
-            sourceBranch
+            sourceBranch,
           );
 
           // Handle cases where content retrieval might fail
@@ -580,7 +580,7 @@ export async function getPullRequestDiff(rawParams: any) {
             newPath,
             oldContentStr,
             newContentStr,
-            change.item.objectId || "unknown" // Use objectId for index line if available
+            change.item.objectId || "unknown", // Use objectId for index line if available
           );
         }
         // Ensure a newline separates patches for different files
@@ -612,16 +612,16 @@ async function getFileContent(path: string, version: string): Promise<string> {
   }
   try {
     const itemUrl = `${ORG_URL}/${DEFAULT_PROJECT}/_apis/git/repositories/${DEFAULT_REPOSITORY}/items?path=${encodeURIComponent(
-      path
+      path,
     )}&versionType=branch&version=${encodeURIComponent(
-      version
+      version,
     )}&api-version=7.1-preview.1`;
     const headers = { Accept: "application/octet-stream" };
     const response = await makeAzureDevOpsRequest(
       itemUrl,
       "GET",
       undefined,
-      headers
+      headers,
     );
     // Add detailed logging to inspect the response
     console.error(
@@ -631,29 +631,29 @@ async function getFileContent(path: string, version: string): Promise<string> {
         response
           ? JSON.stringify(response).substring(0, 200) + "..."
           : "null or undefined"
-      }`
+      }`,
     );
 
     if (response && typeof response === "object" && response.content) {
       console.error(
-        `[API] getFileContent returning object content for ${path}`
+        `[API] getFileContent returning object content for ${path}`,
       );
       return response.content;
     } else if (typeof response === "string") {
       // Check if the string indicates an error we missed
       if (response.startsWith("<") && response.endsWith(">")) {
         console.error(
-          `[API] getFileContent received potential error string: ${response}`
+          `[API] getFileContent received potential error string: ${response}`,
         );
         return ""; // Treat placeholder errors as empty
       }
       console.error(
-        `[API] getFileContent returning string content for ${path}`
+        `[API] getFileContent returning string content for ${path}`,
       );
       return response;
     }
     console.error(
-      `[API] getFileContent returning empty string for ${path} because response was not handled.`
+      `[API] getFileContent returning empty string for ${path} because response was not handled.`,
     );
     return "";
   } catch (error) {
@@ -670,7 +670,7 @@ function generateUnifiedDiff(
   newContent: string,
   objectId?: string, // Optional object ID for index line
   isNewFile: boolean = false,
-  isDeletedFile: boolean = false
+  isDeletedFile: boolean = false,
 ): string {
   // Use createPatch from the 'diff' library
   const patch = Diff.createPatch(
@@ -679,7 +679,7 @@ function generateUnifiedDiff(
     newContent,
     "", // oldHeader - not typically needed here
     "", // newHeader - not typically needed here
-    { context: 3 } // Number of context lines, standard is 3
+    { context: 3 }, // Number of context lines, standard is 3
   );
 
   // The createPatch function includes the --- and +++ lines.
@@ -757,7 +757,7 @@ export async function updatePullRequest(rawParams: any) {
 
   console.error(
     "[API] Updating pull request:",
-    JSON.stringify(params, null, 2)
+    JSON.stringify(params, null, 2),
   );
 
   try {
@@ -775,7 +775,6 @@ export async function updatePullRequest(rawParams: any) {
     if (params.status !== undefined) {
       // Map status string to the API's expected enum/value if necessary
       // For azure-devops-node-api, it might handle the string directly or need a specific type.
-      // Let's assume it handles the string for now, but this might need adjustment.
       // The REST API uses numbers: 1=active, 2=abandoned, 3=completed
       let statusId: number | undefined;
       switch (params.status) {
@@ -792,6 +791,10 @@ export async function updatePullRequest(rawParams: any) {
       if (statusId !== undefined) {
         updateData.status = statusId;
       }
+    }
+    // Add isDraft if provided
+    if (params.isDraft !== undefined) {
+      updateData.isDraft = params.isDraft;
     }
     // Add work item references if provided
     // Note: This typically *replaces* existing links, doesn't append.
@@ -825,17 +828,17 @@ export async function updatePullRequest(rawParams: any) {
 
     console.error(
       `[API] Calling PATCH ${updateUrl} with data:`,
-      JSON.stringify(updateData, null, 2)
+      JSON.stringify(updateData, null, 2),
     );
 
     const updatedPullRequest = await makeAzureDevOpsRequest(
       updateUrl,
       "PATCH",
-      updateData
+      updateData,
     );
 
     console.error(
-      `[API] Updated pull request via REST: ${updatedPullRequest.pullRequestId}`
+      `[API] Updated pull request via REST: ${updatedPullRequest.pullRequestId}`,
     );
 
     return {
