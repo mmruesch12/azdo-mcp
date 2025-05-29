@@ -1,0 +1,34 @@
+# Smithery configuration file: https://smithery.ai/docs/build/project-config
+
+startCommand:
+  type: stdio
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => ({ command: 'node', args: ['build/index.js'], env: { AZURE_DEVOPS_ORG_URL: config.azureDevopsOrgUrl, AZURE_DEVOPS_PAT: config.azureDevopsPat, AZURE_DEVOPS_PROJECT: config.azureDevopsProject, AZURE_DEVOPS_REPOSITORY: config.azureDevopsRepository } })
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - azureDevopsOrgUrl
+      - azureDevopsPat
+      - azureDevopsProject
+      - azureDevopsRepository
+    properties:
+      azureDevopsOrgUrl:
+        type: string
+        description: Azure DevOps organization URL, e.g., https://dev.azure.com/your-org
+      azureDevopsPat:
+        type: string
+        description: Azure DevOps personal access token
+      azureDevopsProject:
+        type: string
+        description: Azure DevOps project name
+      azureDevopsRepository:
+        type: string
+        description: Azure DevOps repository name
+  exampleConfig:
+    azureDevopsOrgUrl: https://dev.azure.com/example-org
+    azureDevopsPat: 0123456789abcdef0123456789abcdef01234567
+    azureDevopsProject: example-project
+    azureDevopsRepository: example-repo
