@@ -1,5 +1,6 @@
 # Azure DevOps MCP Server
 
+[![smithery badge](https://smithery.ai/badge/@mmruesch12/azdo-mcp)](https://smithery.ai/server/@mmruesch12/azdo-mcp)
 An MCP (Model Context Protocol) server that provides integration with Azure DevOps, allowing AI assistants to interact with Azure DevOps work items, pull requests, and wikis.
 
 <a href="https://glama.ai/mcp/servers/@mmruesch12/azdo-mcp">
@@ -35,6 +36,14 @@ npm run build
 ## Installation
 
 Add the server configuration to your MCP settings:
+
+### Installing via Smithery
+
+To install Azure DevOps Integration for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mmruesch12/azdo-mcp):
+
+```bash
+npx -y @smithery/cli install @mmruesch12/azdo-mcp --client claude
+```
 
 ### For VSCode
 
