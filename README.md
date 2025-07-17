@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mmruesch12-azdo-mcp-badge.png)](https://mseep.ai/app/mmruesch12-azdo-mcp)
+
 # Azure DevOps MCP Server
 
 An MCP (Model Context Protocol) server that provides integration with Azure DevOps, allowing AI assistants to interact with Azure DevOps work items, pull requests, and wikis.
